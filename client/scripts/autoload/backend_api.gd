@@ -53,6 +53,10 @@ func start_lobby(lobby_id: String) -> Dictionary:
 	return await _request("POST", "/v1/lobbies/%s/start" % lobby_id, {}, true)
 
 
+func leave_lobby(lobby_id: String) -> Dictionary:
+	return await _request("POST", "/v1/lobbies/%s/leave" % lobby_id, {}, true)
+
+
 func _request(method: String, endpoint: String, payload: Variant, requires_auth: bool) -> Dictionary:
 	var http := HTTPRequest.new()
 	add_child(http)

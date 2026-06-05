@@ -4,7 +4,7 @@ enum State { MENU, PLAYING, PAUSED, GAME_OVER }
 
 @export var player_scene: PackedScene
 @export var weapon_scenes: Array[PackedScene] = []
-@export var enable_multiplayer_test_mode: bool = true
+@export var enable_multiplayer_test_mode: bool = false
 @export var multiplayer_server_url: String = "ws://127.0.0.1:7777"
 @export var snapshot_smoothing: float = 0.35
 
@@ -94,7 +94,8 @@ func _spawn_player_local() -> void:
 
 
 func _setup_network_mode() -> void:
-	if not enable_multiplayer_test_mode:
+	var should_use_network: bool = enable_multiplayer_test_mode or GameData.multiplayer_session_active
+	if not should_use_network:
 		return
 	_is_network_mode = true
 	if not NetworkClient.snapshot_received.is_connected(_on_snapshot_received):
@@ -107,10 +108,13 @@ func _setup_network_mode() -> void:
 		NetworkClient.connection_failed.connect(_on_connection_failed)
 	if not NetworkClient.disconnected_from_server.is_connected(_on_disconnected_from_server):
 		NetworkClient.disconnected_from_server.connect(_on_disconnected_from_server)
-	var connect_error: Error = NetworkClient.connect_to_server(multiplayer_server_url)
+	var target_server_url: String = multiplayer_server_url
+	if GameData.multiplayer_session_active and not GameData.multiplayer_server_url.is_empty():
+		target_server_url = GameData.multiplayer_server_url
+	var connect_error: Error = NetworkClient.connect_to_server(target_server_url)
 	if connect_error != OK:
 		_is_network_mode = false
-		push_error("Failed to connect multiplayer test mode to %s (error %d)." % [multiplayer_server_url, connect_error])
+		push_error("Failed to connect multiplayer mode to %s (error %d)." % [target_server_url, connect_error])
 
 
 func _on_connected_to_server() -> void:
@@ -274,6 +278,8 @@ func _to_vector3(raw: Variant, fallback: Vector3) -> Vector3:
 
 
 func _fallback_to_singleplayer() -> void:
+	if GameData.multiplayer_session_active:
+		return
 	if current_state != State.PLAYING:
 		return
 	if _player != null:

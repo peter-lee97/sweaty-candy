@@ -5,15 +5,26 @@ extends Node
 @export var move_speed: float = 6.0
 @export var arena_half_size: float = 14.0
 @export var snapshot_rate_hz: float = 20.0
+@export var backend_base_url: String = "http://127.0.0.1:8787"
+@export var backend_server_name: String = "Godot Server"
+@export var advertised_host: String = "127.0.0.1"
+@export var heartbeat_interval_sec: float = 10.0
+@export var registration_retry_interval_sec: float = 3.0
 
 var _server_tick: int = 0
 var _snapshot_timer: float = 0.0
+var _heartbeat_timer: float = 0.0
+var _registration_retry_timer: float = 0.0
 var _players: Dictionary = {}
 var _pending_inputs: Dictionary = {}
+var _backend_server_id: String = ""
+var _is_registering_backend: bool = false
 
 
 func _ready() -> void:
-	_start_server()
+	var started: bool = _start_server()
+	if started:
+		_register_server_in_backend()
 
 
 func _physics_process(delta: float) -> void:
@@ -25,18 +36,29 @@ func _physics_process(delta: float) -> void:
 	if _snapshot_timer >= (1.0 / snapshot_rate_hz):
 		_snapshot_timer = 0.0
 		_broadcast_snapshot()
+	if _backend_server_id.is_empty():
+		_registration_retry_timer += delta
+		if _registration_retry_timer >= registration_retry_interval_sec and not _is_registering_backend:
+			_registration_retry_timer = 0.0
+			_register_server_in_backend()
+	if not _backend_server_id.is_empty():
+		_heartbeat_timer += delta
+		if _heartbeat_timer >= heartbeat_interval_sec:
+			_heartbeat_timer = 0.0
+			_send_backend_heartbeat()
 
 
-func _start_server() -> void:
+func _start_server() -> bool:
 	var peer := WebSocketMultiplayerPeer.new()
 	var error: Error = peer.create_server(listen_port)
 	if error != OK:
 		push_error("Failed to start WebSocket server on port %d (error %d)." % [listen_port, error])
-		return
+		return false
 	multiplayer.multiplayer_peer = peer
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	print("Server listening on ws://0.0.0.0:%d" % listen_port)
+	return true
 
 
 func _on_peer_connected(peer_id: int) -> void:
@@ -184,3 +206,70 @@ func receive_server_snapshot(_payload: Dictionary) -> void:
 @rpc("authority", "reliable")
 func receive_lobby_state(_payload: Dictionary) -> void:
 	pass
+
+
+func _register_server_in_backend() -> void:
+	if _is_registering_backend:
+		return
+	_is_registering_backend = true
+	var target_url: String = backend_base_url.strip_edges().trim_suffix("/")
+	var payload: Dictionary = {
+		"name": backend_server_name,
+		"host": advertised_host,
+		"port": listen_port,
+		"capacity": max_players
+	}
+	var result: Dictionary = await _http_json("POST", "%s/v1/servers/register" % target_url, payload)
+	_is_registering_backend = false
+	if not result.get("ok", false):
+		push_warning("Backend register failed: %s" % result.get("error", "Unknown error"))
+		return
+	var body: Dictionary = result.get("body", {})
+	_backend_server_id = body.get("id", "")
+	if _backend_server_id.is_empty():
+		push_warning("Backend register returned empty server id.")
+		return
+	print("Registered backend server id %s" % _backend_server_id)
+	_heartbeat_timer = 0.0
+	_send_backend_heartbeat()
+
+
+func _send_backend_heartbeat() -> void:
+	if _backend_server_id.is_empty():
+		return
+	var result: Dictionary = await _http_json(
+		"POST",
+		"%s/v1/servers/%s/heartbeat" % [backend_base_url.strip_edges().trim_suffix("/"), _backend_server_id],
+		{}
+	)
+	if not result.get("ok", false):
+		push_warning("Backend heartbeat failed: %s" % result.get("error", "Unknown error"))
+
+
+func _http_json(method: String, url: String, payload: Dictionary) -> Dictionary:
+	var request := HTTPRequest.new()
+	add_child(request)
+	var headers: PackedStringArray = ["Content-Type: application/json"]
+	var request_body: String = JSON.stringify(payload)
+	var method_id: int = HTTPClient.METHOD_POST if method == "POST" else HTTPClient.METHOD_GET
+	var err: Error = request.request(url, headers, method_id, request_body)
+	if err != OK:
+		request.queue_free()
+		return {"ok": false, "error": "request error %d" % err}
+	var completed: Array = await request.request_completed
+	request.queue_free()
+	var request_result: int = completed[0]
+	var status_code: int = completed[1]
+	if request_result != HTTPRequest.RESULT_SUCCESS:
+		return {"ok": false, "status": status_code, "error": "HTTP request failed (result %d, status %d)" % [request_result, status_code]}
+	var text: String = PackedByteArray(completed[3]).get_string_from_utf8()
+	var parsed: Variant = {}
+	if not text.is_empty():
+		var json_result: Variant = JSON.parse_string(text)
+		if json_result != null:
+			parsed = json_result
+	var ok: bool = status_code >= 200 and status_code < 300
+	var error_message: String = ""
+	if not ok:
+		error_message = parsed.get("error", "HTTP %d" % status_code)
+	return {"ok": ok, "status": status_code, "body": parsed, "error": error_message}

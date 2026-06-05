@@ -25,73 +25,36 @@ theme_override_constants/margin_bottom = 24
 
 [node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
 layout_mode = 2
+theme_override_constants/separation = 10
 
 [node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "Multiplayer Lobby"
 horizontal_alignment = 1
 
-[node name="AuthRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="ActionRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="BackendUrlInput" type="LineEdit" parent="MarginContainer/VBoxContainer/AuthRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="UsernameInput" type="LineEdit" parent="MarginContainer/VBoxContainer/AuthRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 2
-
-[node name="AuthPasswordInput" type="LineEdit" parent="MarginContainer/VBoxContainer/AuthRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 2
-secret = true
-
-[node name="LoginButton" type="Button" parent="MarginContainer/VBoxContainer/AuthRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Login"
-
-[node name="RegisterButton" type="Button" parent="MarginContainer/VBoxContainer/AuthRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Register"
-
-[node name="CreateRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 0
-theme_override_constants/separation = 8
-
-[node name="RoomNameInput" type="LineEdit" parent="MarginContainer/VBoxContainer/CreateRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="RoomPasswordInput" type="LineEdit" parent="MarginContainer/VBoxContainer/CreateRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-secret = true
-
-[node name="MaxPlayersInput" type="SpinBox" parent="MarginContainer/VBoxContainer/CreateRow"]
-unique_name_in_owner = true
-layout_mode = 2
-min_value = 2.0
-max_value = 8.0
-value = 4.0
-
-[node name="CreateButton" type="Button" parent="MarginContainer/VBoxContainer/CreateRow"]
+[node name="CreateRoomButton" type="Button" parent="MarginContainer/VBoxContainer/ActionRow"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Create Room"
 
+[node name="RefreshButton" type="Button" parent="MarginContainer/VBoxContainer/ActionRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Refresh"
+
+[node name="BackButton" type="Button" parent="MarginContainer/VBoxContainer/ActionRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Back to Menu"
+
 [node name="RoomTable" type="Tree" parent="MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 320)
+custom_minimum_size = Vector2(0, 360)
 layout_mode = 2
 size_flags_vertical = 3
 
@@ -110,26 +73,65 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Join Selected"
 
-[node name="StartButton" type="Button" parent="MarginContainer/VBoxContainer/JoinRow"]
+[node name="StatusLabel" type="Label" parent="MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Start Selected"
+text = "Select a room to join or start."
 
-[node name="RefreshButton" type="Button" parent="MarginContainer/VBoxContainer/JoinRow"]
+[node name="CreateRoomPopup" type="PopupPanel" parent="."]
+unique_name_in_owner = true
+initial_position = 1
+size = Vector2i(480, 220)
+
+[node name="CreateMargin" type="MarginContainer" parent="CreateRoomPopup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="CreateVBox" type="VBoxContainer" parent="CreateRoomPopup/CreateMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PopupTitleLabel" type="Label" parent="CreateRoomPopup/CreateMargin/CreateVBox"]
+layout_mode = 2
+text = "Create Room"
+horizontal_alignment = 1
+
+[node name="RoomNameInput" type="LineEdit" parent="CreateRoomPopup/CreateMargin/CreateVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Refresh"
 
-[node name="BottomRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="RoomPasswordInput" type="LineEdit" parent="CreateRoomPopup/CreateMargin/CreateVBox"]
+unique_name_in_owner = true
 layout_mode = 2
+secret = true
 
-[node name="StatusLabel" type="Label" parent="MarginContainer/VBoxContainer/BottomRow"]
+[node name="MaxPlayersInput" type="SpinBox" parent="CreateRoomPopup/CreateMargin/CreateVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 2.0
+max_value = 8.0
+value = 4.0
+
+[node name="PopupButtonsRow" type="HBoxContainer" parent="CreateRoomPopup/CreateMargin/CreateVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PopupCancelButton" type="Button" parent="CreateRoomPopup/CreateMargin/CreateVBox/PopupButtonsRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Create or select a room."
+text = "Cancel"
 
-[node name="BackButton" type="Button" parent="MarginContainer/VBoxContainer/BottomRow"]
+[node name="PopupCreateButton" type="Button" parent="CreateRoomPopup/CreateMargin/CreateVBox/PopupButtonsRow"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Back"
+size_flags_horizontal = 3
+text = "Create"

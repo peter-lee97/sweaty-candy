@@ -11,4 +11,4 @@ func _on_start_pressed() -> void:
 
 
 func _on_multiplayer_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")
+	get_tree().change_scene_to_file("res://scenes/ui/multiplayer_auth.tscn")

@@ -45,6 +45,7 @@ function isAlnum(value) {
 }
 
 function normalizeLobby(store, lobby) {
+  const assignedServer = lobby.gameServerId ? store.servers.find((s) => s.id === lobby.gameServerId) : null;
   return {
     id: lobby.id,
     name: lobby.name,
@@ -54,6 +55,8 @@ function normalizeLobby(store, lobby) {
     isPrivate: !!lobby.passwordHash,
     state: lobby.state,
     gameServerId: lobby.gameServerId,
+    serverHost: assignedServer ? assignedServer.host : "",
+    serverPort: assignedServer ? assignedServer.port : 0,
     createdAt: lobby.createdAt
   };
 }
