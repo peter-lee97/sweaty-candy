@@ -1,0 +1,135 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/lobby.gd" id="lobby_script"]
+
+[node name="Lobby" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("lobby_script")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 24
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Multiplayer Lobby"
+horizontal_alignment = 1
+
+[node name="AuthRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BackendUrlInput" type="LineEdit" parent="MarginContainer/VBoxContainer/AuthRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="UsernameInput" type="LineEdit" parent="MarginContainer/VBoxContainer/AuthRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 2
+
+[node name="AuthPasswordInput" type="LineEdit" parent="MarginContainer/VBoxContainer/AuthRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 2
+secret = true
+
+[node name="LoginButton" type="Button" parent="MarginContainer/VBoxContainer/AuthRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Login"
+
+[node name="RegisterButton" type="Button" parent="MarginContainer/VBoxContainer/AuthRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Register"
+
+[node name="CreateRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_constants/separation = 8
+
+[node name="RoomNameInput" type="LineEdit" parent="MarginContainer/VBoxContainer/CreateRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RoomPasswordInput" type="LineEdit" parent="MarginContainer/VBoxContainer/CreateRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+secret = true
+
+[node name="MaxPlayersInput" type="SpinBox" parent="MarginContainer/VBoxContainer/CreateRow"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 2.0
+max_value = 8.0
+value = 4.0
+
+[node name="CreateButton" type="Button" parent="MarginContainer/VBoxContainer/CreateRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Create Room"
+
+[node name="RoomTable" type="Tree" parent="MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 320)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="JoinRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="JoinPasswordInput" type="LineEdit" parent="MarginContainer/VBoxContainer/JoinRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+secret = true
+
+[node name="JoinButton" type="Button" parent="MarginContainer/VBoxContainer/JoinRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Join Selected"
+
+[node name="StartButton" type="Button" parent="MarginContainer/VBoxContainer/JoinRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Start Selected"
+
+[node name="RefreshButton" type="Button" parent="MarginContainer/VBoxContainer/JoinRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Refresh"
+
+[node name="BottomRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="StatusLabel" type="Label" parent="MarginContainer/VBoxContainer/BottomRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Create or select a room."
+
+[node name="BackButton" type="Button" parent="MarginContainer/VBoxContainer/BottomRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back"

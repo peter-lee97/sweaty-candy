@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "godot-performance-optimization": {
+      "source": "thedivergentai/gd-agentic-skills",
+      "sourceType": "github",
+      "skillPath": "skills/godot-performance-optimization/SKILL.md",
+      "computedHash": "e4961facc0318ed6eb7f9a1b31d36bce935b7f16a492e797a5e879732bd2691d"
+    }
+  }
+}

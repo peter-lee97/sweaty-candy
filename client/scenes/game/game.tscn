@@ -1,0 +1,65 @@
+[gd_scene load_steps=17 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/game_manager.gd" id="gm"]
+[ext_resource type="Script" path="res://scripts/player/camera_follow.gd" id="cam"]
+[ext_resource type="Script" path="res://scripts/game/entity_manager.gd" id="em"]
+[ext_resource type="Script" path="res://scripts/game/wave_manager.gd" id="wm"]
+[ext_resource type="Script" path="res://scripts/game/score_manager.gd" id="sm"]
+[ext_resource type="PackedScene" path="res://scenes/game/arena.tscn" id="arena"]
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="player"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/weapon_blaster.tscn" id="blaster"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/weapon_lobber.tscn" id="lobber"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/weapon_sprayer.tscn" id="sprayer"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/weapon_freezer.tscn" id="freezer"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/enemy_base.tscn" id="enemy"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/enemy_fast.tscn" id="enemy_fast"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/enemy_tank.tscn" id="enemy_tank"]
+[ext_resource type="PackedScene" path="res://scenes/pickups/health_pickup.tscn" id="health_pickup"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="hud"]
+
+[node name="Game" type="Node3D"]
+script = ExtResource("gm")
+player_scene = ExtResource("player")
+weapon_scenes = [ExtResource("blaster"), ExtResource("lobber"), ExtResource("sprayer"), ExtResource("freezer")]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+unique_name_in_owner = true
+current = true
+fov = 50.0
+script = ExtResource("cam")
+offset = Vector3(0, 18, 12)
+smoothing = 8.0
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 20, 0)
+light_energy = 0.8
+
+[node name="Arena" parent="." instance=ExtResource("arena")]
+
+[node name="EntityManager" type="Node3D" parent="."]
+unique_name_in_owner = true
+script = ExtResource("em")
+
+[node name="Players" type="Node3D" parent="EntityManager"]
+
+[node name="Enemies" type="Node3D" parent="EntityManager"]
+
+[node name="Projectiles" type="Node3D" parent="EntityManager"]
+
+[node name="Pickups" type="Node3D" parent="EntityManager"]
+
+[node name="WaveManager" type="Node" parent="."]
+unique_name_in_owner = true
+script = ExtResource("wm")
+enemy_scene = ExtResource("enemy")
+enemy_fast_scene = ExtResource("enemy_fast")
+enemy_tank_scene = ExtResource("enemy_tank")
+health_pickup_scene = ExtResource("health_pickup")
+health_drop_chance = 0.15
+
+[node name="ScoreManager" type="Node" parent="."]
+unique_name_in_owner = true
+script = ExtResource("sm")
+
+[node name="HUD" parent="." instance=ExtResource("hud")]
+unique_name_in_owner = true

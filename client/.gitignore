@@ -1,0 +1,12 @@
+.godot/
+*.import
+export_presets.cfg
+build/
+*.html
+*.wasm
+*.pck
+*.js
+*.ctex
+*.md5
+*.uid
+.DS_Store
