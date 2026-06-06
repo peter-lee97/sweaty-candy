@@ -36,7 +36,7 @@ func _physics_process(delta: float) -> void:
 	if move_dir != Vector3.ZERO:
 		_aim_direction = move_dir
 
-	if Input.is_action_pressed("shoot") and _weapon:
+	if Input.is_action_pressed("shoot") and _weapon and not _is_pointer_over_ui():
 		_weapon.try_fire(global_position + Vector3(0, 0.5, 0), _aim_direction)
 
 
@@ -77,3 +77,20 @@ func _on_died() -> void:
 func _on_health_changed(current: int, maximum: int) -> void:
 	if emits_global_events:
 		GameEvents.player_health_changed.emit(current, maximum)
+
+
+func _is_pointer_over_ui() -> bool:
+	var viewport := get_viewport()
+	if viewport == null:
+		return false
+	var hovered_control: Control = viewport.gui_get_hovered_control()
+	return _is_pause_or_quit_control(hovered_control)
+
+
+func _is_pause_or_quit_control(control: Control) -> bool:
+	var current: Control = control
+	while current != null:
+		if current.name == "PauseToggleButton" or current.name == "ExitHoldButton":
+			return true
+		current = current.get_parent() as Control
+	return false

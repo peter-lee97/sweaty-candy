@@ -60,3 +60,24 @@ offset_top = -44.0
 offset_right = 160.0
 offset_bottom = -20.0
 text = "Pistol"
+
+[node name="TopRightIconRow" type="HBoxContainer" parent="."]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -124.0
+offset_top = 52.0
+offset_right = -20.0
+offset_bottom = 84.0
+theme_override_constants/separation = 6
+
+[node name="PauseToggleButton" type="Button" parent="TopRightIconRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "▶"
+
+[node name="ExitHoldButton" type="Button" parent="TopRightIconRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "⏻"

@@ -22,6 +22,9 @@ func _ready() -> void:
 	refresh_button.pressed.connect(_on_refresh_pressed)
 	leave_button.pressed.connect(_on_leave_pressed)
 	start_game_button.pressed.connect(_on_start_game_pressed)
+	if not BackendApi.lobby_events_updated.is_connected(_on_lobby_events_updated):
+		BackendApi.lobby_events_updated.connect(_on_lobby_events_updated)
+	BackendApi.connect_lobby_events()
 	await _refresh_room()
 
 
@@ -48,7 +51,7 @@ func _on_start_game_pressed() -> void:
 	var server_info: Dictionary = body.get("assignedServer", {})
 	if server_info.has("host") and server_info.has("port"):
 		GameData.multiplayer_server_url = "ws://%s:%s" % [server_info.get("host", "127.0.0.1"), str(server_info.get("port", 7777))]
-	await _refresh_room()
+	status_label.text = "Starting room..."
 
 
 func _refresh_room() -> void:
@@ -68,9 +71,35 @@ func _refresh_room() -> void:
 		return
 	_current_room = found
 	_apply_room_to_ui(found)
-	if found.get("state", "Waiting") == "Started":
-		var host: String = found.get("serverHost", "")
-		var port: int = int(found.get("serverPort", 0))
+	_maybe_enter_started_game(found)
+
+
+func _on_lobby_events_updated(payload: Dictionary) -> void:
+	if payload.get("type", "") != "lobbies_updated":
+		return
+	_apply_snapshot(payload.get("lobbies", []))
+
+
+func _apply_snapshot(lobbies: Array) -> void:
+	var found: Dictionary = {}
+	for room: Dictionary in lobbies:
+		if room.get("id", "") == GameData.multiplayer_lobby_id:
+			found = room
+			break
+	if found.is_empty():
+		status_label.text = "Room no longer exists."
+		GameData.clear_multiplayer_session()
+		get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")
+		return
+	_current_room = found
+	_apply_room_to_ui(found)
+	_maybe_enter_started_game(found)
+
+
+func _maybe_enter_started_game(room: Dictionary) -> void:
+	if room.get("state", "Waiting") == "Started":
+		var host: String = room.get("serverHost", "")
+		var port: int = int(room.get("serverPort", 0))
 		if not host.is_empty() and port > 0:
 			GameData.multiplayer_server_url = "ws://%s:%d" % [host, port]
 		if GameData.multiplayer_server_url.is_empty():
@@ -81,6 +110,7 @@ func _refresh_room() -> void:
 
 
 func _apply_room_to_ui(room: Dictionary) -> void:
+	GameData.multiplayer_owner_user_id = room.get("ownerUserId", GameData.multiplayer_owner_user_id)
 	var current_players: int = int(room.get("currentPlayers", 0))
 	var max_players: int = int(room.get("maxPlayers", 0))
 	room_name_label.text = "Room: %s" % room.get("name", "")
@@ -97,3 +127,8 @@ func _apply_room_to_ui(room: Dictionary) -> void:
 
 func _is_owner() -> bool:
 	return GameData.multiplayer_owner_user_id == BackendApi.current_user.get("id", "")
+
+
+func _exit_tree() -> void:
+	if BackendApi.lobby_events_updated.is_connected(_on_lobby_events_updated):
+		BackendApi.lobby_events_updated.disconnect(_on_lobby_events_updated)

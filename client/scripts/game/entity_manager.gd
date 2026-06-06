@@ -7,18 +7,18 @@ extends Node3D
 
 
 func spawn_enemy(enemy: Node3D, position: Vector3) -> void:
-	enemy.global_position = position
 	enemies.add_child(enemy)
+	enemy.global_position = position
 
 
 func spawn_projectile(projectile: Node3D, position: Vector3, direction: Vector3, damage: int, speed: float) -> void:
-	projectile.setup(position, direction, damage, speed)
 	projectiles.add_child(projectile)
+	projectile.setup(position, direction, damage, speed)
 
 
 func spawn_pickup(pickup: Node3D, spawn_position: Vector3) -> void:
-	pickup.global_position = spawn_position
 	pickups.add_child(pickup)
+	pickup.global_position = spawn_position
 
 
 func get_enemy_count() -> int:

@@ -14,6 +14,7 @@ var _is_network_mode: bool = false
 var _local_peer_id: int = -1
 var _pending_weapon_cycle: int = 0
 var _network_players: Dictionary = {}
+var _network_enemies: Dictionary = {}
 var _local_aim_direction: Vector3 = Vector3.FORWARD
 
 @onready var camera: Camera3D = %Camera3D
@@ -24,30 +25,29 @@ var _local_aim_direction: Vector3 = Vector3.FORWARD
 
 func _ready() -> void:
 	GameEvents.player_died.connect(_on_player_died)
+	GameEvents.pause_toggle_requested.connect(_on_pause_toggle_requested)
+	GameEvents.exit_to_menu_requested.connect(_on_exit_to_menu_requested)
 	wave_manager.set_entity_manager(entity_manager)
 	_setup_network_mode()
 	await _warmup_rendering()
 	_start_game()
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("pause") and current_state == State.PLAYING:
-		current_state = State.PAUSED
-		get_tree().paused = true
-	elif event.is_action_pressed("pause") and current_state == State.PAUSED:
-		current_state = State.PLAYING
-		get_tree().paused = false
-	elif current_state == State.PLAYING:
-		if event.is_action_pressed("weapon_next"):
-			if _is_network_mode:
-				_pending_weapon_cycle = 1
-			elif _player:
-				_player.cycle_weapon(1)
-		elif event.is_action_pressed("weapon_prev"):
-			if _is_network_mode:
-				_pending_weapon_cycle = -1
-			elif _player:
-				_player.cycle_weapon(-1)
+func _input(event: InputEvent) -> void:
+	if current_state != State.PLAYING:
+		return
+	if get_tree().paused:
+		return
+	if event.is_action_pressed("weapon_next"):
+		if _is_network_mode:
+			_pending_weapon_cycle = 1
+		elif _player:
+			_player.cycle_weapon(1)
+	elif event.is_action_pressed("weapon_prev"):
+		if _is_network_mode:
+			_pending_weapon_cycle = -1
+		elif _player:
+			_player.cycle_weapon(-1)
 
 
 func _physics_process(_delta: float) -> void:
@@ -69,6 +69,7 @@ func _physics_process(_delta: float) -> void:
 
 func _start_game() -> void:
 	current_state = State.PLAYING
+	GameEvents.pause_state_changed.emit(false)
 	score_manager.reset()
 	if _is_network_mode:
 		return
@@ -133,11 +134,17 @@ func _on_disconnected_from_server() -> void:
 
 
 func _on_lobby_state_received(payload: Dictionary) -> void:
+	if current_state == State.PAUSED:
+		return
 	_sync_network_players(payload.get("players", {}))
+	_sync_network_enemies(payload.get("enemies", {}))
 
 
 func _on_snapshot_received(payload: Dictionary) -> void:
+	if current_state == State.PAUSED:
+		return
 	_sync_network_players(payload.get("players", {}))
+	_sync_network_enemies(payload.get("enemies", {}))
 
 
 func _sync_network_players(server_players: Dictionary) -> void:
@@ -170,6 +177,28 @@ func _sync_network_players(server_players: Dictionary) -> void:
 		_player = local_player as Node3D
 
 
+func _sync_network_enemies(server_enemies: Dictionary) -> void:
+	if not _is_network_mode:
+		return
+	var active_enemy_ids: Dictionary = {}
+	for key: Variant in server_enemies.keys():
+		var enemy_id: String = str(key)
+		active_enemy_ids[enemy_id] = true
+		var state: Dictionary = server_enemies[key]
+		if not _network_enemies.has(enemy_id):
+			_network_enemies[enemy_id] = _spawn_network_enemy(state)
+		var enemy_node: Node3D = _network_enemies[enemy_id]
+		_apply_server_enemy_state(enemy_node, state)
+	for key: Variant in _network_enemies.keys():
+		var enemy_id: String = str(key)
+		if active_enemy_ids.has(enemy_id):
+			continue
+		var stale_enemy: Node3D = _network_enemies[enemy_id]
+		if stale_enemy and is_instance_valid(stale_enemy):
+			stale_enemy.queue_free()
+		_network_enemies.erase(enemy_id)
+
+
 func _spawn_network_player(peer_id: int) -> Node3D:
 	var player_node = player_scene.instantiate()
 	player_node.accepts_local_input = false
@@ -179,9 +208,26 @@ func _spawn_network_player(peer_id: int) -> Node3D:
 	return player_node as Node3D
 
 
+func _spawn_network_enemy(state: Dictionary) -> Node3D:
+	var enemy_scene: PackedScene = _pick_enemy_scene(str(state.get("type", "base")))
+	if enemy_scene == null:
+		var fallback := Node3D.new()
+		entity_manager.get_node("Enemies").add_child(fallback)
+		return fallback
+	var enemy_node: Node3D = enemy_scene.instantiate()
+	enemy_node.process_mode = Node.PROCESS_MODE_DISABLED
+	entity_manager.get_node("Enemies").add_child(enemy_node)
+	return enemy_node
+
+
 func _apply_server_player_state(player_node: Node3D, state: Dictionary) -> void:
 	var target_position: Vector3 = _to_vector3(state.get("position", player_node.global_position), player_node.global_position)
 	player_node.global_position = player_node.global_position.lerp(target_position, snapshot_smoothing)
+
+
+func _apply_server_enemy_state(enemy_node: Node3D, state: Dictionary) -> void:
+	var target_position: Vector3 = _to_vector3(state.get("position", enemy_node.global_position), enemy_node.global_position)
+	enemy_node.global_position = enemy_node.global_position.lerp(target_position, snapshot_smoothing)
 
 
 func _on_player_died() -> void:
@@ -192,6 +238,32 @@ func _on_player_died() -> void:
 		get_tree().paused = false
 		get_tree().change_scene_to_file("res://scenes/ui/game_over.tscn")
 	)
+
+
+func _on_exit_to_menu_requested() -> void:
+	if not GameData.multiplayer_lobby_id.is_empty() and BackendApi.is_authenticated():
+		await BackendApi.leave_lobby(GameData.multiplayer_lobby_id)
+	GameData.clear_multiplayer_session()
+	NetworkClient.disconnect_from_server()
+	current_state = State.MENU
+	GameEvents.pause_state_changed.emit(false)
+	get_tree().paused = false
+	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
+
+
+func _on_pause_toggle_requested() -> void:
+	_toggle_pause_state()
+
+
+func _toggle_pause_state() -> void:
+	if current_state != State.PLAYING and current_state != State.PAUSED:
+		return
+	if not _can_control_game_state():
+		return
+	var should_pause: bool = current_state == State.PLAYING
+	current_state = State.PAUSED if should_pause else State.PLAYING
+	get_tree().paused = should_pause
+	GameEvents.pause_state_changed.emit(should_pause)
 
 
 func _warmup_rendering() -> void:
@@ -287,3 +359,22 @@ func _fallback_to_singleplayer() -> void:
 	_spawn_player_local()
 	camera.set_target(_player)
 	wave_manager.start_waves()
+
+
+func _can_control_game_state() -> bool:
+	if not _is_network_mode:
+		return true
+	var owner_id: String = GameData.multiplayer_owner_user_id
+	var user_id: String = BackendApi.current_user.get("id", "")
+	return not owner_id.is_empty() and user_id == owner_id
+
+
+func _pick_enemy_scene(enemy_type: String) -> PackedScene:
+	var base_scene: PackedScene = wave_manager.get("enemy_scene")
+	var fast_scene: PackedScene = wave_manager.get("enemy_fast_scene")
+	var tank_scene: PackedScene = wave_manager.get("enemy_tank_scene")
+	if enemy_type == "tank" and tank_scene != null:
+		return tank_scene
+	if enemy_type == "fast" and fast_scene != null:
+		return fast_scene
+	return base_scene

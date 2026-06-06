@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "godot-multiplayer-networking": {
+      "source": "thedivergentai/gd-agentic-skills",
+      "sourceType": "github",
+      "skillPath": "skills/godot-multiplayer-networking/SKILL.md",
+      "computedHash": "d158fd43d959f94ea9abbc574dfb20e945f33d4b6e7302fa8fbd8f36fef7af8d"
+    },
     "godot-performance-optimization": {
       "source": "thedivergentai/gd-agentic-skills",
       "sourceType": "github",

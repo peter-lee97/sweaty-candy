@@ -9,3 +9,6 @@ signal wave_cleared(wave_number: int)
 signal score_updated(score: int, combo: int)
 signal player_health_changed(current: int, maximum: int)
 signal weapon_changed(weapon_name: String)
+signal pause_state_changed(paused: bool)
+signal pause_toggle_requested
+signal exit_to_menu_requested
