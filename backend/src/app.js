@@ -3,12 +3,13 @@ import path from "node:path";
 import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
-import { hashPassword, issueToken, verifyPassword } from "./auth.js";
+import { generateGuestId, generateGuestUsername, hashPassword, issueToken, verifyPassword } from "./auth.js";
 import { readStore, writeStore } from "./store.js";
 
 const DEFAULT_PORT = Number(process.env.PORT || 8787);
 const DEFAULT_HOST = process.env.HOST || "0.0.0.0";
 const SERVER_TTL_MS = 60_000;
+const GUEST_SESSION_DURATION_MS = Number(process.env.GUEST_SESSION_DURATION_MS || 7200000);
 let runningServer = null;
 let runningWebSocketServer = null;
 const websocketClients = new Set();
@@ -189,6 +190,44 @@ function createBackendServer() {
         store.tokens[token] = user.id;
         writeStore(store);
         return json(res, 200, { token, user: { id: user.id, username: user.username } });
+      }
+
+      if (pathname === "/v1/auth/guest" && method === "POST") {
+        const username = generateGuestUsername(["apple", "banana", "cherry", "grape", "kiwi", "lemon", "mango", "orange", "peach", "plum"], ["red", "blue", "green", "yellow", "purple", "orange", "pink", "white", "black", "teal"]);
+        if (store.users.some((u) => u.username.toLowerCase() === username.toLowerCase()) || store.guestSessions[username]) {
+          return json(res, 409, { error: "username already exists, please try again" });
+        }
+        const guestId = generateGuestId();
+        const createdAt = Date.now();
+        const expiresAt = createdAt + GUEST_SESSION_DURATION_MS;
+        store.users.push({
+          id: guestId,
+          username,
+          createdAt
+        });
+        store.guestSessions[guestId] = { createdAt, expiresAt };
+        const token = issueToken();
+        store.tokens[token] = guestId;
+        writeStore(store);
+        return json(res, 201, { id: guestId, username, token });
+      }
+
+      if (pathname === "/v1/auth/refresh" && method === "POST") {
+        const user = parseAuthUser(req, store);
+        if (!user) {
+          return json(res, 401, { error: "unauthorized" });
+        }
+        if (!user.id.startsWith("guest_")) {
+          return json(res, 400, { error: "only guest sessions can be refreshed" });
+        }
+        const guestSession = store.guestSessions[user.id];
+        if (!guestSession) {
+          return json(res, 404, { error: "guest session not found" });
+        }
+        const newExpiresAt = Date.now() + GUEST_SESSION_DURATION_MS;
+        guestSession.expiresAt = newExpiresAt;
+        writeStore(store);
+        return json(res, 200, { ok: true, expiresAt: newExpiresAt });
       }
 
       if (pathname === "/v1/auth/me" && method === "GET") {
@@ -421,10 +460,29 @@ function isDirectExecution() {
   return path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 }
 
+function cleanupExpiredGuestSessions() {
+  const store = readStore();
+  const now = Date.now();
+  let cleanedCount = 0;
+  for (const [guestId, session] of Object.entries(store.guestSessions)) {
+    if (session.expiresAt < now) {
+      delete store.guestSessions[guestId];
+      store.users = store.users.filter((u) => u.id !== guestId);
+      cleanedCount++;
+    }
+  }
+  if (cleanedCount > 0) {
+    writeStore(store);
+    console.log(`Cleaned up ${cleanedCount} expired guest sessions`);
+  }
+}
+
 if (isDirectExecution()) {
+  cleanupExpiredGuestSessions();
   startBackendServer()
     .then(({ host, port }) => {
       console.log(`Backend listening on http://${host}:${port}`);
+      console.log(`Guest session duration: ${GUEST_SESSION_DURATION_MS / 1000 / 60} minutes`);
     })
     .catch((error) => {
       console.error(`Failed to start backend: ${error.message}`);

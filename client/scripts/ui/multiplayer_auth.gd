@@ -12,7 +12,7 @@ const COLORS: PackedStringArray = [
 @onready var password_input: LineEdit = %PasswordInput
 @onready var register_button: Button = %RegisterButton
 @onready var login_button: Button = %LoginButton
-@onready var randomize_button: Button = %RandomizeButton
+@onready var guest_button: Button = %GuestButton
 @onready var continue_button: Button = %ContinueButton
 @onready var back_button: Button = %BackButton
 @onready var status_label: Label = %StatusLabel
@@ -26,7 +26,7 @@ func _ready() -> void:
 	username_input.text = _generate_username()
 	register_button.pressed.connect(_on_register_pressed)
 	login_button.pressed.connect(_on_login_pressed)
-	randomize_button.pressed.connect(_on_randomize_pressed)
+	guest_button.pressed.connect(_on_guest_pressed)
 	continue_button.pressed.connect(_on_continue_pressed)
 	back_button.pressed.connect(_on_back_pressed)
 	_update_continue_state()
@@ -39,7 +39,7 @@ func _on_register_pressed() -> void:
 		status_label.text = "Enter username and password."
 		return
 	BackendApi.set_base_url(backend_url_input.text)
-	var result: Dictionary = await BackendApi.register_user(username, password)
+	var result: Dictionary = await BackendApi.register_user_custom(username, password)
 	if not result.get("ok", false):
 		status_label.text = "Register failed: %s" % result.get("error", "Unknown error")
 		return
@@ -62,18 +62,27 @@ func _on_login_pressed() -> void:
 	_update_continue_state()
 
 
-func _on_randomize_pressed() -> void:
-	username_input.text = _generate_username()
+func _on_guest_pressed() -> void:
+	BackendApi.set_base_url(backend_url_input.text)
+	var result: Dictionary = await BackendApi.login_as_guest()
+	if not result.get("ok", false):
+		status_label.text = "Guest login failed: %s" % result.get("error", "Unknown error")
+		_update_continue_state()
+		return
+	status_label.text = "Guest logged in as %s." % result.get("body", {}).get("username", "Guest")
+	_update_continue_state()
 
 
 func _on_continue_pressed() -> void:
 	if not BackendApi.is_authenticated():
 		status_label.text = "Login first."
 		return
+	GameData.user_type = BackendApi.get_user_type()
 	get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")
 
 
 func _on_back_pressed() -> void:
+	BackendApi.clear_auth()
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 

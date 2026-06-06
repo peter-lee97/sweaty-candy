@@ -27,6 +27,7 @@ func _ready() -> void:
 	GameEvents.player_died.connect(_on_player_died)
 	GameEvents.pause_toggle_requested.connect(_on_pause_toggle_requested)
 	GameEvents.exit_to_menu_requested.connect(_on_exit_to_menu_requested)
+	GameEvents.guest_session_expired.connect(_on_guest_session_expired)
 	wave_manager.set_entity_manager(entity_manager)
 	_setup_network_mode()
 	await _warmup_rendering()
@@ -129,120 +130,16 @@ func _on_connection_failed() -> void:
 
 
 func _on_disconnected_from_server() -> void:
-	_is_network_mode = false
-	_fallback_to_singleplayer()
-
-
-func _on_lobby_state_received(payload: Dictionary) -> void:
-	if current_state == State.PAUSED:
-		return
-	_sync_network_players(payload.get("players", {}))
-	_sync_network_enemies(payload.get("enemies", {}))
-
-
-func _on_snapshot_received(payload: Dictionary) -> void:
-	if current_state == State.PAUSED:
-		return
-	_sync_network_players(payload.get("players", {}))
-	_sync_network_enemies(payload.get("enemies", {}))
-
-
-func _sync_network_players(server_players: Dictionary) -> void:
-	if not _is_network_mode:
-		return
-	var active_peer_ids: Dictionary = {}
-	for key: Variant in server_players.keys():
-		var peer_id: int = int(key)
-		active_peer_ids[peer_id] = true
-		var state: Dictionary = server_players[key]
-		if not _network_players.has(peer_id):
-			_network_players[peer_id] = _spawn_network_player(peer_id)
-		var player_node: Node3D = _network_players[peer_id]
-		_apply_server_player_state(player_node, state)
-	for key: Variant in _network_players.keys():
-		var peer_id: int = int(key)
-		if active_peer_ids.has(peer_id):
-			continue
-		var stale_player: Node3D = _network_players[peer_id]
-		if stale_player and is_instance_valid(stale_player):
-			stale_player.queue_free()
-		_network_players.erase(peer_id)
-	if _local_peer_id < 0 and NetworkClient.is_server_connected():
-		_local_peer_id = multiplayer.get_unique_id()
-	if _local_peer_id > 0 and _network_players.has(_local_peer_id):
-		var local_player = _network_players[_local_peer_id]
-		local_player.emits_global_events = true
-		if camera:
-			camera.set_target(local_player as Node3D)
-		_player = local_player as Node3D
-
-
-func _sync_network_enemies(server_enemies: Dictionary) -> void:
-	if not _is_network_mode:
-		return
-	var active_enemy_ids: Dictionary = {}
-	for key: Variant in server_enemies.keys():
-		var enemy_id: String = str(key)
-		active_enemy_ids[enemy_id] = true
-		var state: Dictionary = server_enemies[key]
-		if not _network_enemies.has(enemy_id):
-			_network_enemies[enemy_id] = _spawn_network_enemy(state)
-		var enemy_node: Node3D = _network_enemies[enemy_id]
-		_apply_server_enemy_state(enemy_node, state)
-	for key: Variant in _network_enemies.keys():
-		var enemy_id: String = str(key)
-		if active_enemy_ids.has(enemy_id):
-			continue
-		var stale_enemy: Node3D = _network_enemies[enemy_id]
-		if stale_enemy and is_instance_valid(stale_enemy):
-			stale_enemy.queue_free()
-		_network_enemies.erase(enemy_id)
-
-
-func _spawn_network_player(peer_id: int) -> Node3D:
-	var player_node = player_scene.instantiate()
-	player_node.accepts_local_input = false
-	player_node.emits_global_events = peer_id == _local_peer_id
-	player_node.add_to_group("players")
-	entity_manager.get_node("Players").add_child(player_node)
-	return player_node as Node3D
-
-
-func _spawn_network_enemy(state: Dictionary) -> Node3D:
-	var enemy_scene: PackedScene = _pick_enemy_scene(str(state.get("type", "base")))
-	if enemy_scene == null:
-		var fallback := Node3D.new()
-		entity_manager.get_node("Enemies").add_child(fallback)
-		return fallback
-	var enemy_node: Node3D = enemy_scene.instantiate()
-	enemy_node.process_mode = Node.PROCESS_MODE_DISABLED
-	entity_manager.get_node("Enemies").add_child(enemy_node)
-	return enemy_node
-
-
-func _apply_server_player_state(player_node: Node3D, state: Dictionary) -> void:
-	var target_position: Vector3 = _to_vector3(state.get("position", player_node.global_position), player_node.global_position)
-	player_node.global_position = player_node.global_position.lerp(target_position, snapshot_smoothing)
-
-
-func _apply_server_enemy_state(enemy_node: Node3D, state: Dictionary) -> void:
-	var target_position: Vector3 = _to_vector3(state.get("position", enemy_node.global_position), enemy_node.global_position)
-	enemy_node.global_position = enemy_node.global_position.lerp(target_position, snapshot_smoothing)
-
-
-func _on_player_died() -> void:
-	current_state = State.GAME_OVER
-	GameData.last_score = score_manager.score
-	GameData.last_wave = wave_manager._current_wave
-	get_tree().create_timer(1.5).timeout.connect(func() -> void:
-		get_tree().paused = false
-		get_tree().change_scene_to_file("res://scenes/ui/game_over.tscn")
-	)
+	current_state = State.MENU
+	BackendApi.clear_auth()
+	get_tree().paused = false
+	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 
 func _on_exit_to_menu_requested() -> void:
 	if not GameData.multiplayer_lobby_id.is_empty() and BackendApi.is_authenticated():
 		await BackendApi.leave_lobby(GameData.multiplayer_lobby_id)
+	BackendApi.clear_auth()
 	GameData.clear_multiplayer_session()
 	NetworkClient.disconnect_from_server()
 	current_state = State.MENU

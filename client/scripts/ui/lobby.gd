@@ -211,7 +211,7 @@ func _compare_rooms(a: Dictionary, b: Dictionary) -> int:
 		1:
 			return _compare_strings(a.get("name", ""), b.get("name", ""))
 		2:
-			return _compare_ints(int(a.get("currentPlayers", 0)), int(b.get("currentPlayers", 0)))
+			return _compare_ints(int(a.get("currentPlayers", 0)), int(a.get("currentPlayers", 0)))
 		3:
 			return _compare_ints(int(a.get("isPrivate", false)), int(b.get("isPrivate", false)))
 		4:
@@ -262,9 +262,11 @@ func _enter_waiting_room(room: Dictionary) -> void:
 	GameData.multiplayer_owner_user_id = room.get("ownerUserId", "")
 	GameData.multiplayer_session_active = false
 	GameData.multiplayer_server_url = ""
+	GameData.user_type = BackendApi.get_user_type()
 	get_tree().change_scene_to_file("res://scenes/ui/waiting_room.tscn")
 
 
 func _exit_tree() -> void:
 	if BackendApi.lobby_events_updated.is_connected(_on_lobby_events_updated):
 		BackendApi.lobby_events_updated.disconnect(_on_lobby_events_updated)
+	BackendApi.disconnect_lobby_events()

@@ -14,10 +14,12 @@ var _current_room: Dictionary = {}
 
 func _ready() -> void:
 	if not BackendApi.is_authenticated():
-		get_tree().change_scene_to_file("res://scenes/ui/multiplayer_auth.tscn")
+		BackendApi.clear_auth()
+		get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 		return
 	if GameData.multiplayer_lobby_id.is_empty():
-		get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")
+		BackendApi.clear_auth()
+		get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 		return
 	refresh_button.pressed.connect(_on_refresh_pressed)
 	leave_button.pressed.connect(_on_leave_pressed)
@@ -35,8 +37,9 @@ func _on_refresh_pressed() -> void:
 func _on_leave_pressed() -> void:
 	if not GameData.multiplayer_lobby_id.is_empty():
 		await BackendApi.leave_lobby(GameData.multiplayer_lobby_id)
+	BackendApi.clear_auth()
 	GameData.clear_multiplayer_session()
-	get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")
+	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 
 func _on_start_game_pressed() -> void:
@@ -66,8 +69,9 @@ func _refresh_room() -> void:
 			break
 	if found.is_empty():
 		status_label.text = "Room no longer exists."
+		BackendApi.clear_auth()
 		GameData.clear_multiplayer_session()
-		get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")
+		get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 		return
 	_current_room = found
 	_apply_room_to_ui(found)
@@ -88,8 +92,9 @@ func _apply_snapshot(lobbies: Array) -> void:
 			break
 	if found.is_empty():
 		status_label.text = "Room no longer exists."
+		BackendApi.clear_auth()
 		GameData.clear_multiplayer_session()
-		get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")
+		get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 		return
 	_current_room = found
 	_apply_room_to_ui(found)
@@ -119,10 +124,11 @@ func _apply_room_to_ui(room: Dictionary) -> void:
 	state_label.text = "State: %s" % room.get("state", "Waiting")
 	start_game_button.visible = _is_owner()
 	start_game_button.disabled = room.get("state", "Waiting") != "Waiting"
+	var user_type := BackendApi.get_user_type()
 	if _is_owner():
-		status_label.text = "You are owner. Start when ready."
+		status_label.text = "You are owner (%s). Start when ready." % user_type.capitalize()
 	else:
-		status_label.text = "Waiting for owner to start..."
+		status_label.text = "Waiting for owner to start... (Current user: %s)" % user_type.capitalize()
 
 
 func _is_owner() -> bool:
@@ -132,3 +138,4 @@ func _is_owner() -> bool:
 func _exit_tree() -> void:
 	if BackendApi.lobby_events_updated.is_connected(_on_lobby_events_updated):
 		BackendApi.lobby_events_updated.disconnect(_on_lobby_events_updated)
+	BackendApi.disconnect_lobby_events()

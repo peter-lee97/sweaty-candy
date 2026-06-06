@@ -2,24 +2,39 @@ extends Node
 
 signal lobby_events_updated(payload: Dictionary)
 signal lobby_events_connection_changed(connected: bool)
+signal guest_session_expired()
+
+const AUTH_CONFIG_PATH: String = "user://config/auth.cfg"
 
 var base_url: String = "http://127.0.0.1:8787"
 var auth_token: String = ""
 var current_user: Dictionary = {}
 var _lobby_events_peer: WebSocketPeer = null
 var _lobby_events_connected: bool = false
+var _user_type: String = ""
+var _guest_session_expires_at: int = 0
+var _token_refresh_timer: float = 0.0
 
 
 func set_base_url(url: String) -> void:
 	base_url = url.strip_edges().trim_suffix("/")
 	disconnect_lobby_events()
+	_load_auth_from_config()
 
 
 func is_authenticated() -> bool:
-	return not auth_token.is_empty()
+	if not auth_token.is_empty():
+		return true
+	return _load_auth_from_config()
 
 
-func register_user(username: String, password: String) -> Dictionary:
+func get_user_type() -> String:
+	if _user_type.is_empty():
+		_load_auth_from_config()
+	return _user_type
+
+
+func register_user_custom(username: String, password: String) -> Dictionary:
 	return await _request("POST", "/v1/auth/register", {"username": username, "password": password}, false)
 
 
@@ -28,7 +43,31 @@ func login_user(username: String, password: String) -> Dictionary:
 	if result.get("ok", false):
 		auth_token = result.get("body", {}).get("token", "")
 		current_user = result.get("body", {}).get("user", {})
+		_user_type = "account"
+		_save_auth_to_config()
 		connect_lobby_events()
+	return result
+
+
+func login_as_guest() -> Dictionary:
+	var result: Dictionary = await _request("POST", "/v1/auth/guest", {}, false)
+	if result.get("ok", false):
+		auth_token = result.get("body", {}).get("token", "")
+		current_user = result.get("body", {})
+		_user_type = "guest"
+		_guest_session_expires_at = Date.get_unix_time_from_system() + 7200
+		_save_auth_to_config()
+		connect_lobby_events()
+	return result
+
+
+func refresh_token() -> Dictionary:
+	if _user_type != "guest":
+		return {"ok": false, "error": "only guest sessions can be refreshed"}
+	var result: Dictionary = await _request("POST", "/v1/auth/refresh", {}, true)
+	if result.get("ok", false):
+		_guest_session_expires_at = result.get("body", {}).get("expiresAt", 0) / 1000
+		_save_auth_to_config()
 	return result
 
 
@@ -91,11 +130,21 @@ func disconnect_lobby_events() -> void:
 	set_process(false)
 
 
+func clear_auth() -> void:
+	auth_token = ""
+	current_user = {}
+	_user_type = ""
+	_guest_session_expires_at = 0
+	_save_auth_to_config()
+	disconnect_lobby_events()
+
+
 func _ready() -> void:
 	set_process(false)
+	_load_auth_from_config()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _lobby_events_peer == null:
 		set_process(false)
 		return
@@ -112,6 +161,14 @@ func _process(_delta: float) -> void:
 		var parsed: Variant = JSON.parse_string(packet_text)
 		if parsed is Dictionary:
 			lobby_events_updated.emit(parsed)
+	
+	if _user_type == "guest" and _guest_session_expires_at > 0:
+		_token_refresh_timer += delta
+		var time_until_expiry: int = _guest_session_expires_at - int(Date.get_unix_time_from_system())
+		if time_until_expiry <= 300 and time_until_expiry > 0:
+			if _lobby_events_connected:
+				refresh_token()
+				_token_refresh_timer = 0.0
 
 
 func _build_lobby_events_url() -> String:
@@ -123,7 +180,19 @@ func _build_lobby_events_url() -> String:
 	return "%s/v1/lobbies/events?token=%s" % [ws_base, auth_token.uri_encode()]
 
 
+func _check_guest_session_expiry() -> bool:
+	if _user_type != "guest" or _guest_session_expires_at <= 0:
+		return false
+	var current_time := int(Date.get_unix_time_from_system())
+	if current_time >= _guest_session_expires_at:
+		guest_session_expired.emit()
+		return true
+	return false
+
+
 func _request(method: String, endpoint: String, payload: Variant, requires_auth: bool) -> Dictionary:
+	if requires_auth and _check_guest_session_expiry():
+		return {"ok": false, "status": 401, "error": "Guest session expired"}
 	var http := HTTPRequest.new()
 	add_child(http)
 	var headers: PackedStringArray = ["Content-Type: application/json"]
@@ -141,6 +210,10 @@ func _request(method: String, endpoint: String, payload: Variant, requires_auth:
 	if err != OK:
 		http.queue_free()
 		return {"ok": false, "status": 0, "error": "Request error %d" % err}
+	
+	if requires_auth and _check_guest_session_expiry():
+		http.queue_free()
+		return {"ok": false, "status": 401, "error": "Guest session expired"}
 
 	var result: Array = await http.request_completed
 	http.queue_free()
@@ -161,3 +234,39 @@ func _request(method: String, endpoint: String, payload: Variant, requires_auth:
 		"body": parsed,
 		"error": error_message
 	}
+
+
+func _load_auth_from_config() -> bool:
+	var config := ConfigFile.new()
+	var err := config.load(AUTH_CONFIG_PATH)
+	if err != OK:
+		return false
+	if not config.has_section("authentication"):
+		return false
+	auth_token = config.get_value("authentication", "token", "")
+	if auth_token.is_empty():
+		return false
+	current_user = {
+		"id": config.get_value("authentication", "user_id", ""),
+		"username": config.get_value("authentication", "username", "")
+	}
+	_user_type = config.get_value("authentication", "user_type", "")
+	var created_at := config.get_value("authentication", "created_at", 0)
+	if _user_type == "guest" and created_at > 0:
+		_guest_session_expires_at = created_at + 7200
+	return true
+
+
+func _save_auth_to_config() -> void:
+	var config := ConfigFile.new()
+	config.set_value("authentication", "user_id", current_user.get("id", ""))
+	config.set_value("authentication", "username", current_user.get("username", ""))
+	config.set_value("authentication", "user_type", _user_type)
+	config.set_value("authentication", "token", auth_token)
+	config.set_value("authentication", "created_at", int(Date.get_unix_time_from_system()))
+	config.set_value("authentication", "backend_url", base_url)
+	config.save(AUTH_CONFIG_PATH)
+
+
+func _exit_tree() -> void:
+	_save_auth_to_config()

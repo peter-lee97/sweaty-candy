@@ -12,3 +12,4 @@ signal weapon_changed(weapon_name: String)
 signal pause_state_changed(paused: bool)
 signal pause_toggle_requested
 signal exit_to_menu_requested
+signal guest_session_expired

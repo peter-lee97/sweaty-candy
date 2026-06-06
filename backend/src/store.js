@@ -9,6 +9,7 @@ const LEGACY_JSON_PATH = path.join(DATA_DIR, "store.json");
 const EMPTY_STORE = {
   users: [],
   tokens: {},
+  guestSessions: {},
   lobbies: [],
   servers: [],
   lastUserId: 0,
@@ -69,7 +70,8 @@ function readLegacyStore() {
     }
     return {
       ...EMPTY_STORE,
-      ...parsed
+      ...parsed,
+      guestSessions: parsed.guestSessions || {}
     };
   } catch {
     return null;
@@ -82,7 +84,12 @@ export function readStore() {
   if (!row) {
     return { ...EMPTY_STORE };
   }
-  return JSON.parse(row.value);
+  const store = JSON.parse(row.value);
+  return {
+    ...EMPTY_STORE,
+    ...store,
+    guestSessions: store.guestSessions || {}
+  };
 }
 
 export function writeStore(store) {

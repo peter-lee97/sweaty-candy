@@ -47,3 +47,7 @@ custom_minimum_size = Vector2(0, 16)
 [node name="MultiplayerButton" type="Button" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "Multiplayer Lobby"
+
+[node name="GuestButton" type="Button" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Continue as Guest"

@@ -7,6 +7,7 @@ var multiplayer_lobby_name: String = ""
 var multiplayer_owner_user_id: String = ""
 var multiplayer_server_url: String = ""
 var multiplayer_session_active: bool = false
+var user_type: String = ""
 
 
 func clear_multiplayer_session() -> void:
@@ -15,3 +16,4 @@ func clear_multiplayer_session() -> void:
 	multiplayer_owner_user_id = ""
 	multiplayer_server_url = ""
 	multiplayer_session_active = false
+	user_type = ""

@@ -46,11 +46,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="RandomizeButton" type="Button" parent="MarginContainer/VBoxContainer/UsernameRow"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Randomize"
-
 [node name="PasswordInput" type="LineEdit" parent="MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -72,10 +67,15 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "Login"
 
+[node name="GuestButton" type="Button" parent="MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Continue as Guest"
+
 [node name="StatusLabel" type="Label" parent="MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Register or login to continue."
+text = "Register, login, or continue as guest."
 horizontal_alignment = 1
 
 [node name="BottomRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
