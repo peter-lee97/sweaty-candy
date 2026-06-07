@@ -13,7 +13,7 @@ var _lobby_events_peer: WebSocketPeer = null
 var _lobby_events_connected: bool = false
 var _user_type: String = ""
 var _guest_session_expires_at: int = 0
-var _token_refresh_timer: float = 0.0
+var _last_refresh_time: float = 0.0
 
 
 func set_base_url(url: String) -> void:
@@ -68,13 +68,7 @@ func refresh_token() -> Dictionary:
 	if result.get("ok", false):
 		_guest_session_expires_at = result.get("body", {}).get("expiresAt", 0) / 1000
 		_save_auth_to_config()
-	return result
-
-
-func fetch_me() -> Dictionary:
-	var result: Dictionary = await _request("GET", "/v1/auth/me", null, true)
-	if result.get("ok", false):
-		current_user = result.get("body", {})
+		_last_refresh_time = Time.get_ticks_msec() / 1000.0
 	return result
 
 
@@ -144,7 +138,7 @@ func _ready() -> void:
 	_load_auth_from_config()
 
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if _lobby_events_peer == null:
 		set_process(false)
 		return
@@ -163,12 +157,11 @@ func _process(delta: float) -> void:
 			lobby_events_updated.emit(parsed)
 	
 	if _user_type == "guest" and _guest_session_expires_at > 0:
-		_token_refresh_timer += delta
 		var time_until_expiry: int = _guest_session_expires_at - int(Date.get_unix_time_from_system())
 		if time_until_expiry <= 300 and time_until_expiry > 0:
-			if _lobby_events_connected:
+			if _lobby_events_connected and (Time.get_ticks_msec() / 1000.0 - _last_refresh_time) >= 60.0:
 				refresh_token()
-				_token_refresh_timer = 0.0
+				_last_refresh_time = Time.get_ticks_msec() / 1000.0
 
 
 func _build_lobby_events_url() -> String:
@@ -263,7 +256,10 @@ func _save_auth_to_config() -> void:
 	config.set_value("authentication", "username", current_user.get("username", ""))
 	config.set_value("authentication", "user_type", _user_type)
 	config.set_value("authentication", "token", auth_token)
-	config.set_value("authentication", "created_at", int(Date.get_unix_time_from_system()))
+	if _user_type == "guest" and _guest_session_expires_at > 0:
+		config.set_value("authentication", "created_at", _guest_session_expires_at - 7200)
+	else:
+		config.set_value("authentication", "created_at", int(Date.get_unix_time_from_system()))
 	config.set_value("authentication", "backend_url", base_url)
 	config.save(AUTH_CONFIG_PATH)
 
