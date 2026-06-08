@@ -11,7 +11,6 @@ enum State { MENU, PLAYING, PAUSED, GAME_OVER }
 var current_state: State = State.MENU
 var _player: Node3D = null
 var _is_network_mode: bool = false
-var _local_peer_id: int = -1
 var _pending_weapon_cycle: int = 0
 var _network_players: Dictionary = {}
 var _network_enemies: Dictionary = {}
@@ -120,7 +119,7 @@ func _setup_network_mode() -> void:
 
 
 func _on_connected_to_server() -> void:
-	_local_peer_id = multiplayer.get_unique_id()
+	pass
 
 
 func _on_connection_failed() -> void:
@@ -131,7 +130,8 @@ func _on_connection_failed() -> void:
 
 func _on_disconnected_from_server() -> void:
 	current_state = State.MENU
-	BackendApi.clear_auth()
+	GameData.clear_multiplayer_session()
+	NetworkClient.disconnect_from_server()
 	get_tree().paused = false
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
@@ -139,13 +139,105 @@ func _on_disconnected_from_server() -> void:
 func _on_exit_to_menu_requested() -> void:
 	if not GameData.multiplayer_lobby_id.is_empty() and BackendApi.is_authenticated():
 		await BackendApi.leave_lobby(GameData.multiplayer_lobby_id)
-	BackendApi.clear_auth()
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
 	GameData.clear_multiplayer_session()
 	NetworkClient.disconnect_from_server()
 	current_state = State.MENU
 	GameEvents.pause_state_changed.emit(false)
 	get_tree().paused = false
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
+
+
+func _on_player_died() -> void:
+	current_state = State.GAME_OVER
+	NetworkClient.disconnect_from_server()
+	GameData.clear_multiplayer_session()
+	get_tree().paused = true
+	await get_tree().create_timer(2.0).timeout
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
+	get_tree().paused = false
+	get_tree().change_scene_to_file("res://scenes/ui/game_over.tscn")
+
+
+func _on_guest_session_expired() -> void:
+	current_state = State.MENU
+	GameData.clear_multiplayer_session()
+	NetworkClient.disconnect_from_server()
+	get_tree().paused = false
+	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
+
+
+func _on_snapshot_received(payload: Dictionary) -> void:
+	if not payload.has("players"):
+		return
+	if not payload.has("enemies"):
+		return
+	var players: Dictionary = payload.players
+	var enemies: Dictionary = payload.enemies
+	_sync_players(players)
+	_sync_enemies(enemies)
+
+
+func _on_lobby_state_received(payload: Dictionary) -> void:
+	if not payload.has("isReady"):
+		return
+	var is_ready: bool = payload.isReady
+	if is_ready and _is_network_mode:
+		NetworkClient.send_player_intent(Vector2.ZERO, Vector3.FORWARD, false, 0)
+
+
+func _sync_players(players: Dictionary) -> void:
+	var player_ids: Array = players.keys()
+	var local_id: int = multiplayer.get_unique_id()
+	for peer_id in _network_players:
+		if not player_ids.has(peer_id):
+			if peer_id == local_id:
+				camera.set_target(null)
+			_network_players[peer_id].queue_free()
+			_network_players.erase(peer_id)
+	for peer_id in player_ids:
+		var player_data: Dictionary = players[peer_id]
+		if not _network_players.has(peer_id):
+			var new_player = player_scene.instantiate()
+			new_player.add_to_group("players")
+			entity_manager.get_node("Players").add_child(new_player)
+			_network_players[peer_id] = new_player
+		var network_player: Node3D = _network_players[peer_id]
+		var target_pos: Vector3 = _parse_position(player_data.get("position"))
+		network_player.global_position = network_player.global_position.lerp(target_pos, snapshot_smoothing)
+		if peer_id == local_id:
+			camera.set_target(network_player)
+
+
+func _sync_enemies(enemies: Dictionary) -> void:
+	var enemy_ids: Array = enemies.keys()
+	for enemy_id in _network_enemies:
+		if not enemy_ids.has(enemy_id):
+			_network_enemies[enemy_id].queue_free()
+			_network_enemies.erase(enemy_id)
+	for enemy_id in enemy_ids:
+		var enemy_data: Dictionary = enemies[enemy_id]
+		if not _network_enemies.has(enemy_id):
+			var enemy_type: String = enemy_data.get("type", "base")
+			var scene: PackedScene = _pick_enemy_scene(enemy_type)
+			if scene == null:
+				continue
+			var new_enemy = scene.instantiate()
+			entity_manager.get_node("Enemies").add_child(new_enemy)
+			_network_enemies[enemy_id] = new_enemy
+		var network_enemy: Node3D = _network_enemies[enemy_id]
+		var target_pos: Vector3 = _parse_position(enemy_data.get("position"))
+		network_enemy.global_position = network_enemy.global_position.lerp(target_pos, snapshot_smoothing)
+
+
+func _parse_position(raw: Variant) -> Vector3:
+	if raw is Vector3:
+		return raw
+	if raw is Array and raw.size() >= 3:
+		return Vector3(float(raw[0]), float(raw[1]), float(raw[2]))
+	return Vector3.ZERO
 
 
 func _on_pause_toggle_requested() -> void:
@@ -238,14 +330,6 @@ func _find_first_health_component(node: Node) -> HealthComponent:
 	return null
 
 
-func _to_vector3(raw: Variant, fallback: Vector3) -> Vector3:
-	if raw is Vector3:
-		return raw
-	if raw is Array and raw.size() >= 3:
-		return Vector3(float(raw[0]), float(raw[1]), float(raw[2]))
-	return fallback
-
-
 func _fallback_to_singleplayer() -> void:
 	if GameData.multiplayer_session_active:
 		return
@@ -258,14 +342,6 @@ func _fallback_to_singleplayer() -> void:
 	wave_manager.start_waves()
 
 
-func _can_control_game_state() -> bool:
-	if not _is_network_mode:
-		return true
-	var owner_id: String = GameData.multiplayer_owner_user_id
-	var user_id: String = BackendApi.current_user.get("id", "")
-	return not owner_id.is_empty() and user_id == owner_id
-
-
 func _pick_enemy_scene(enemy_type: String) -> PackedScene:
 	var base_scene: PackedScene = wave_manager.get("enemy_scene")
 	var fast_scene: PackedScene = wave_manager.get("enemy_fast_scene")
@@ -275,3 +351,11 @@ func _pick_enemy_scene(enemy_type: String) -> PackedScene:
 	if enemy_type == "fast" and fast_scene != null:
 		return fast_scene
 	return base_scene
+
+
+func _can_control_game_state() -> bool:
+	if not _is_network_mode:
+		return true
+	var owner_id: String = GameData.multiplayer_owner_user_id
+	var user_id: String = BackendApi.current_user.get("id", "")
+	return not owner_id.is_empty() and user_id == owner_id

@@ -12,6 +12,12 @@
       "sourceType": "github",
       "skillPath": "skills/godot-performance-optimization/SKILL.md",
       "computedHash": "e4961facc0318ed6eb7f9a1b31d36bce935b7f16a492e797a5e879732bd2691d"
+    },
+    "godot-ui-containers": {
+      "source": "thedivergentai/gd-agentic-skills",
+      "sourceType": "github",
+      "skillPath": "skills/godot-ui-containers/SKILL.md",
+      "computedHash": "d440b24f12cdf6fa5003b0badf61e64212cf65464a606564e3253318abff3f41"
     }
   }
 }

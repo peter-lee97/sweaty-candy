@@ -8,9 +8,52 @@ Three components (Phase 3 scaffolding + Phase 4 backend scaffold started):
 
 - **`client/`** — Godot 4 project. Currently single-player, will export to HTML5/WebAssembly later.
 - **`server/`** — Godot 4 headless server build. Authoritative multiplayer host (Phase 3).
-- **`backend/`** — Standalone server for auth, matchmaking, persistence (Phase 4).
+- **`backend/`** — Standalone server for auth, matchmaking, persistence (Phase 4). Node.js with SQLite.
 
 Key rule: **clients are never authoritative**. Code is structured so input → intent → state change, making the multiplayer retrofit clean.
+
+## Authentication
+
+Guest-first auth flow. Users land on main menu and can play immediately as guest.
+
+- **Guest users**: Full functionality (including private lobbies). 2-hour configurable session (`GUEST_SESSION_DURATION_MS` env var, default 7200000ms). Random username (`fruit+color+number`). Session stored in `user://config/auth.cfg` via `ConfigFile`. Auto-refresh 5 mins before expiry (throttled to 60s intervals). Collision check against both `store.users` and active `guestSessions`.
+- **Account users**: Custom username, persistent password-based accounts. No session expiry.
+- **Logout**: Clear auth, free username, return to main menu with fresh guest profile.
+- **No token refresh for account users** — only guest sessions can be refreshed.
+
+### Auth Endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/v1/auth/register` | No | Create account with custom username + password (min 6 chars) |
+| POST | `/v1/auth/login` | No | Login with username + password |
+| POST | `/v1/auth/guest` | No | Create guest session with random username |
+| POST | `/v1/auth/refresh` | Yes | Extend guest session (only for guests) |
+| GET | `/v1/auth/me` | Yes | Get current user info |
+
+### Auth Store Structure
+
+```js
+{
+  users: [{ id, username, passwordHash?, createdAt }],
+  tokens: { [token]: userId },
+  guestSessions: { [guestId]: { createdAt, expiresAt, username } },
+  lobbies: [...],
+  servers: [...]
+}
+```
+
+### Client Auth Storage (`user://config/auth.cfg`)
+
+```ini
+[authentication]
+user_id=guest_1717689600123_a3f2
+username=appleblue123
+user_type=guest
+token=abc123xyz
+created_at=1717689600000
+backend_url=http://127.0.0.1:8787
+```
 
 ## Project Layout
 
@@ -24,7 +67,7 @@ client/
     projectiles/ projectile.tscn, projectile_lobber.tscn, projectile_sprayer.tscn, projectile_freezer.tscn
     weapons/     weapon_blaster.tscn, weapon_lobber.tscn, weapon_sprayer.tscn, weapon_freezer.tscn
     pickups/     health_pickup.tscn
-    ui/          main_menu.tscn, hud.tscn, game_over.tscn
+    ui/          main_menu.tscn, hud.tscn, game_over.tscn, multiplayer_auth.tscn, lobby.tscn, waiting_room.tscn
   scripts/
     game/        game_manager.gd, entity_manager.gd, wave_manager.gd, score_manager.gd
     player/      player.gd, camera_follow.gd
@@ -34,10 +77,21 @@ client/
     components/  health_component.gd, hitbox_component.gd, hit_flash_component.gd
     effects/     death_particles.gd
     pickups/     health_pickup.gd, weapon_pickup.gd
-    ui/          hud.gd, main_menu.gd, game_over.gd
-    autoload/    game_events.gd (signals), game_data.gd (cross-scene state)
+    ui/          hud.gd, main_menu.gd, game_over.gd, multiplayer_auth.gd, lobby.gd, waiting_room.gd
+    autoload/    game_events.gd (signals), game_data.gd (cross-scene state), backend_api.gd (HTTP + WebSocket client)
   assets/        sprites/, audio/, fonts/, tilesets/ (placeholder — add real assets)
   resources/     wave_data/, weapon_data/ (for .tres configs later)
+
+server/
+  scripts/
+    server_main.gd           Authoritative game server with wave system + enemy AI
+
+backend/
+  src/
+    app.js                   Express-like HTTP server with WebSocket support
+    auth.js                  Password hashing, token generation, guest ID/username generation
+    store.js                 SQLite-backed key-value store
+  package.json               Node.js dependencies (ws)
 ```
 
 ## Game Scene Tree
@@ -54,7 +108,7 @@ Game (Node3D) [game_manager.gd]
 │   └── Pickups/
 ├── WaveManager — wave configs, spawns enemies at arena edges
 ├── ScoreManager — score + combo system
-└── HUD (CanvasLayer) — health bar, score, wave, combo, weapon
+└── HUD (CanvasLayer) — health bar, score, wave, combo, weapon, pause/exit buttons
 ```
 
 ## Collision Layers
@@ -75,8 +129,9 @@ Game (Node3D) [game_manager.gd]
 
 ## Autoloads
 
-- **GameEvents** — thin signal bus for cross-system events (`enemy_killed`, `score_updated`, `wave_started`, `player_health_changed`, `player_died`, `weapon_changed`). No logic, just signals.
-- **GameData** — persists data across scene changes (`last_score`, `last_wave`).
+- **GameEvents** — thin signal bus for cross-system events (`enemy_killed`, `score_updated`, `wave_started`, `player_health_changed`, `player_died`, `weapon_changed`, `pause_state_changed`, `pause_toggle_requested`, `exit_to_menu_requested`, `guest_session_expired`). No logic, just signals.
+- **GameData** — persists data across scene changes (`last_score`, `last_wave`, `multiplayer_lobby_id`, `multiplayer_lobby_name`, `multiplayer_owner_user_id`, `multiplayer_server_url`, `multiplayer_session_active`, `user_type`).
+- **BackendApi** — HTTP client + WebSocket for lobby events. Handles auth, guest sessions, token refresh, lobby CRUD. Signal bus: `lobby_events_updated`, `lobby_events_connection_changed`, `guest_session_expired`.
 
 ## Godot Conventions
 
@@ -108,6 +163,40 @@ Game (Node3D) [game_manager.gd]
 - **Camera**: Camera3D at offset (0, 18, 12) with smooth follow. ~56° downward angle.
 - **Juice**: hit flash on enemy damage (white flash 0.1s), death particles (expanding spheres).
 
+## Multiplayer Systems
+
+### Lobby Flow
+1. Main Menu → Multiplayer → Auth Screen (or auto-login guest)
+2. Auth Screen → Register/Login/Continue as Guest → Lobby
+3. Lobby → Create Room / Join Room → Waiting Room
+4. Waiting Room → Start Game → Connect to Game Server
+
+### Lobby Endpoints
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/v1/lobbies` | No | List all lobbies |
+| POST | `/v1/lobbies` | Yes | Create lobby (auto-joins as owner) |
+| POST | `/v1/lobbies/:id/join` | Yes | Join lobby (password required for private) |
+| POST | `/v1/lobbies/:id/leave` | Yes | Leave lobby (auto-deletes if empty, reassigns owner) |
+| POST | `/v1/lobbies/:id/start` | Yes | Start lobby (owner only, assigns game server) |
+| WS | `/v1/lobbies/events?token=...` | Yes | Real-time lobby updates |
+
+### Server Registration
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/v1/servers/register` | No | Register game server |
+| POST | `/v1/servers/:id/heartbeat` | No | Server heartbeat (60s TTL) |
+| GET | `/v1/servers` | No | List active servers |
+
+### Game Server
+- Authoritative simulation with player input processing
+- Wave system with enemy spawning at arena edges
+- Enemy AI: chase nearest player, bounded by arena
+- Snapshot broadcasting at configurable rate (default 20Hz)
+- Network enemy synchronization on client side
+
 ## Commands
 
 ```bash
@@ -115,6 +204,7 @@ godot --path client/                          # Open in editor
 godot --headless --path client/ --export-release "Web" build/web/  # Export for web
 godot --headless --path server/              # Run authoritative multiplayer server (Phase 3 scaffold)
 cd backend && npm start                      # Run backend auth/matchmaking/persistence scaffold (Phase 4)
+GUEST_SESSION_DURATION_MS=3600000 npm start  # Run backend with 1h guest sessions
 ```
 
 ## Common Pitfalls
@@ -126,3 +216,6 @@ cd backend && npm start                      # Run backend auth/matchmaking/pers
 - **Export templates**: must match the exact Godot version.
 - **Weapon cycling**: `weapon_scenes` array order in game.tscn determines cycle order. Blaster must be first (index 0 = starting weapon).
 - **Lobber explosion**: uses `PhysicsDirectSpaceState3D.intersect_shape()` with a sphere query. Runs on the physics layer mask 2 (enemies only).
+- **Guest session expiry**: `_save_auth_to_config` must preserve `created_at` for guests. Refresh endpoint only works for guests. Expiry check runs before every auth-required request.
+- **ConfigFile path**: auth stored in `user://config/auth.cfg` (per-user, cross-platform). Never `res://`.
+- **Lobby password**: 4-11 alphanumeric chars only. Hashed with same PBKDF2 as user passwords.

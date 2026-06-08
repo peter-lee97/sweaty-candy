@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://bu3bvixjexyv8"]
 
-[ext_resource type="Script" path="res://scripts/ui/lobby.gd" id="lobby_script"]
+[ext_resource type="Script" uid="uid://r1p2vbj8s2ec" path="res://scripts/ui/lobby.gd" id="lobby_script"]
 
-[node name="Lobby" type="Control"]
+[node name="Lobby" type="Control" unique_id=2082245999]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -11,7 +11,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("lobby_script")
 
-[node name="MarginContainer" type="MarginContainer" parent="."]
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=651362079]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -19,75 +19,96 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/margin_left = 28
-theme_override_constants/margin_top = 24
+theme_override_constants/margin_top = 80
 theme_override_constants/margin_right = 28
 theme_override_constants/margin_bottom = 24
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer" unique_id=1761038335]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 12
 
-[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+[node name="TitleRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=610437030]
 layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer/TitleRow" unique_id=504219526]
+layout_mode = 2
+size_flags_horizontal = 0
 text = "Multiplayer Lobby"
+
+[node name="Spacer" type="Control" parent="MarginContainer/VBoxContainer/TitleRow" unique_id=164818819]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="UsernameLabel" type="Label" parent="MarginContainer/VBoxContainer/TitleRow" unique_id=1114250952]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Playing as: Guest"
 horizontal_alignment = 1
 
-[node name="ActionRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="ActionRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=1115499394]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="CreateRoomButton" type="Button" parent="MarginContainer/VBoxContainer/ActionRow"]
+[node name="CreateRoomButton" type="Button" parent="MarginContainer/VBoxContainer/ActionRow" unique_id=1455890432]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 text = "Create Room"
 
-[node name="RefreshButton" type="Button" parent="MarginContainer/VBoxContainer/ActionRow"]
+[node name="RefreshButton" type="Button" parent="MarginContainer/VBoxContainer/ActionRow" unique_id=912298439]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 text = "Refresh"
 
-[node name="BackButton" type="Button" parent="MarginContainer/VBoxContainer/ActionRow"]
+[node name="BackButton" type="Button" parent="MarginContainer/VBoxContainer/ActionRow" unique_id=648028515]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Back to Menu"
 
-[node name="RoomTable" type="Tree" parent="MarginContainer/VBoxContainer"]
+[node name="RoomTable" type="Tree" parent="MarginContainer/VBoxContainer" unique_id=500895412]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 360)
+custom_minimum_size = Vector2(0, 300)
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="JoinRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="JoinRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=718004346]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="JoinPasswordInput" type="LineEdit" parent="MarginContainer/VBoxContainer/JoinRow"]
+[node name="JoinPasswordInput" type="LineEdit" parent="MarginContainer/VBoxContainer/JoinRow" unique_id=263089684]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 secret = true
 
-[node name="JoinButton" type="Button" parent="MarginContainer/VBoxContainer/JoinRow"]
+[node name="JoinButton" type="Button" parent="MarginContainer/VBoxContainer/JoinRow" unique_id=756683428]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 text = "Join Selected"
 
-[node name="StatusLabel" type="Label" parent="MarginContainer/VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Select a room to join or start."
-
-[node name="CreateRoomPopup" type="PopupPanel" parent="."]
+[node name="CreateRoomPopup" type="PopupPanel" parent="." unique_id=1133002072]
 unique_name_in_owner = true
 initial_position = 1
 size = Vector2i(480, 220)
 
-[node name="CreateMargin" type="MarginContainer" parent="CreateRoomPopup"]
-layout_mode = 1
+[node name="CreateMargin" type="MarginContainer" parent="CreateRoomPopup" unique_id=954398795]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 476.0
+offset_bottom = 216.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/margin_left = 14
@@ -95,43 +116,90 @@ theme_override_constants/margin_top = 14
 theme_override_constants/margin_right = 14
 theme_override_constants/margin_bottom = 14
 
-[node name="CreateVBox" type="VBoxContainer" parent="CreateRoomPopup/CreateMargin"]
+[node name="CreateVBox" type="VBoxContainer" parent="CreateRoomPopup/CreateMargin" unique_id=1100713535]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="PopupTitleLabel" type="Label" parent="CreateRoomPopup/CreateMargin/CreateVBox"]
+[node name="PopupTitleLabel" type="Label" parent="CreateRoomPopup/CreateMargin/CreateVBox" unique_id=1391005880]
 layout_mode = 2
 text = "Create Room"
 horizontal_alignment = 1
 
-[node name="RoomNameInput" type="LineEdit" parent="CreateRoomPopup/CreateMargin/CreateVBox"]
+[node name="RoomNameInput" type="LineEdit" parent="CreateRoomPopup/CreateMargin/CreateVBox" unique_id=458572530]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 
-[node name="RoomPasswordInput" type="LineEdit" parent="CreateRoomPopup/CreateMargin/CreateVBox"]
+[node name="RoomPasswordInput" type="LineEdit" parent="CreateRoomPopup/CreateMargin/CreateVBox" unique_id=2084486145]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 secret = true
 
-[node name="MaxPlayersInput" type="SpinBox" parent="CreateRoomPopup/CreateMargin/CreateVBox"]
+[node name="MaxPlayersInput" type="SpinBox" parent="CreateRoomPopup/CreateMargin/CreateVBox" unique_id=409763685]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 min_value = 2.0
 max_value = 8.0
 value = 4.0
 
-[node name="PopupButtonsRow" type="HBoxContainer" parent="CreateRoomPopup/CreateMargin/CreateVBox"]
+[node name="PopupButtonsRow" type="HBoxContainer" parent="CreateRoomPopup/CreateMargin/CreateVBox" unique_id=1825030765]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="PopupCancelButton" type="Button" parent="CreateRoomPopup/CreateMargin/CreateVBox/PopupButtonsRow"]
+[node name="PopupCancelButton" type="Button" parent="CreateRoomPopup/CreateMargin/CreateVBox/PopupButtonsRow" unique_id=656012860]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Cancel"
 
-[node name="PopupCreateButton" type="Button" parent="CreateRoomPopup/CreateMargin/CreateVBox/PopupButtonsRow"]
+[node name="PopupCreateButton" type="Button" parent="CreateRoomPopup/CreateMargin/CreateVBox/PopupButtonsRow" unique_id=1133505209]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 0)
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Create"
+	text = "Create"
+
+[node name="TopRightContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchor_left = 1.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 0.0
+offset_left = -20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = 70.0
+theme_override_constants/margin_left = 0
+theme_override_constants/margin_right = 0
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_bottom = 0
+mouse_filter = 2
+
+[node name="ContentRow" type="HBoxContainer" parent="TopRightContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="StatusBox" type="Panel" parent="TopRightContainer/ContentRow"]
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+
+[node name="StatusBoxContainer" type="MarginContainer" parent="TopRightContainer/ContentRow/StatusBox"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="StatusLabel" type="Label" parent="TopRightContainer/ContentRow/StatusBox/StatusBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+	text = "Select a room to join or start."

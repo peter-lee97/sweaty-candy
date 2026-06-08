@@ -55,7 +55,7 @@ func login_as_guest() -> Dictionary:
 		auth_token = result.get("body", {}).get("token", "")
 		current_user = result.get("body", {})
 		_user_type = "guest"
-		_guest_session_expires_at = Date.get_unix_time_from_system() + 7200
+		_guest_session_expires_at = Time.get_unix_time_from_system() + 7200
 		_save_auth_to_config()
 		connect_lobby_events()
 	return result
@@ -150,14 +150,14 @@ func _process(_delta: float) -> void:
 	elif state == WebSocketPeer.STATE_CLOSING or state == WebSocketPeer.STATE_CLOSED:
 		disconnect_lobby_events()
 		return
-	while state == WebSocketPeer.STATE_OPEN and _lobby_events_peer.get_available_packet_count() > 0:
+	while _lobby_events_peer != null and state == WebSocketPeer.STATE_OPEN and _lobby_events_peer.get_available_packet_count() > 0:
 		var packet_text: String = _lobby_events_peer.get_packet().get_string_from_utf8()
 		var parsed: Variant = JSON.parse_string(packet_text)
 		if parsed is Dictionary:
 			lobby_events_updated.emit(parsed)
 	
 	if _user_type == "guest" and _guest_session_expires_at > 0:
-		var time_until_expiry: int = _guest_session_expires_at - int(Date.get_unix_time_from_system())
+		var time_until_expiry: int = _guest_session_expires_at - int(Time.get_unix_time_from_system())
 		if time_until_expiry <= 300 and time_until_expiry > 0:
 			if _lobby_events_connected and (Time.get_ticks_msec() / 1000.0 - _last_refresh_time) >= 60.0:
 				refresh_token()
@@ -176,7 +176,7 @@ func _build_lobby_events_url() -> String:
 func _check_guest_session_expiry() -> bool:
 	if _user_type != "guest" or _guest_session_expires_at <= 0:
 		return false
-	var current_time := int(Date.get_unix_time_from_system())
+	var current_time: int = int(Time.get_unix_time_from_system())
 	if current_time >= _guest_session_expires_at:
 		guest_session_expired.emit()
 		return true
@@ -244,7 +244,7 @@ func _load_auth_from_config() -> bool:
 		"username": config.get_value("authentication", "username", "")
 	}
 	_user_type = config.get_value("authentication", "user_type", "")
-	var created_at := config.get_value("authentication", "created_at", 0)
+	var created_at: int = int(config.get_value("authentication", "created_at", 0))
 	if _user_type == "guest" and created_at > 0:
 		_guest_session_expires_at = created_at + 7200
 	return true
@@ -259,7 +259,7 @@ func _save_auth_to_config() -> void:
 	if _user_type == "guest" and _guest_session_expires_at > 0:
 		config.set_value("authentication", "created_at", _guest_session_expires_at - 7200)
 	else:
-		config.set_value("authentication", "created_at", int(Date.get_unix_time_from_system()))
+		config.set_value("authentication", "created_at", int(Time.get_unix_time_from_system()))
 	config.set_value("authentication", "backend_url", base_url)
 	config.save(AUTH_CONFIG_PATH)
 

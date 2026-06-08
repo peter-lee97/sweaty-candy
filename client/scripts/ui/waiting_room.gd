@@ -14,11 +14,9 @@ var _current_room: Dictionary = {}
 
 func _ready() -> void:
 	if not BackendApi.is_authenticated():
-		BackendApi.clear_auth()
 		get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 		return
 	if GameData.multiplayer_lobby_id.is_empty():
-		BackendApi.clear_auth()
 		get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 		return
 	refresh_button.pressed.connect(_on_refresh_pressed)
@@ -37,7 +35,8 @@ func _on_refresh_pressed() -> void:
 func _on_leave_pressed() -> void:
 	if not GameData.multiplayer_lobby_id.is_empty():
 		await BackendApi.leave_lobby(GameData.multiplayer_lobby_id)
-	BackendApi.clear_auth()
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
 	GameData.clear_multiplayer_session()
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
@@ -47,6 +46,8 @@ func _on_start_game_pressed() -> void:
 		status_label.text = "Only owner can start."
 		return
 	var result: Dictionary = await BackendApi.start_lobby(GameData.multiplayer_lobby_id)
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
 	if not result.get("ok", false):
 		status_label.text = "Start failed: %s" % result.get("error", "Unknown error")
 		return
@@ -59,6 +60,8 @@ func _on_start_game_pressed() -> void:
 
 func _refresh_room() -> void:
 	var result: Dictionary = await BackendApi.list_lobbies()
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
 	if not result.get("ok", false):
 		status_label.text = "Refresh failed: %s" % result.get("error", "Unknown error")
 		return
@@ -69,7 +72,6 @@ func _refresh_room() -> void:
 			break
 	if found.is_empty():
 		status_label.text = "Room no longer exists."
-		BackendApi.clear_auth()
 		GameData.clear_multiplayer_session()
 		get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 		return
@@ -92,7 +94,6 @@ func _apply_snapshot(lobbies: Array) -> void:
 			break
 	if found.is_empty():
 		status_label.text = "Room no longer exists."
-		BackendApi.clear_auth()
 		GameData.clear_multiplayer_session()
 		get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 		return

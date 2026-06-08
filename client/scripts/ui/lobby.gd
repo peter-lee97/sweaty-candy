@@ -3,6 +3,7 @@ extends Control
 const PASSWORD_MIN_LENGTH: int = 4
 const PASSWORD_MAX_LENGTH: int = 11
 
+@onready var username_label: Label = %UsernameLabel
 @onready var create_room_button: Button = %CreateRoomButton
 @onready var refresh_button: Button = %RefreshButton
 @onready var back_button: Button = %BackButton
@@ -26,6 +27,8 @@ func _ready() -> void:
 	room_name_input.placeholder_text = "Optional room name"
 	room_password_input.placeholder_text = "Optional password (4-11 letters/numbers)"
 	join_password_input.placeholder_text = "Password for private room"
+	var username: String = String(BackendApi.current_user.get("username", "Guest"))
+	username_label.text = "Playing as: %s" % username
 
 	_setup_table()
 	create_room_button.pressed.connect(_on_create_room_popup_pressed)
@@ -82,6 +85,8 @@ func _on_popup_create_pressed() -> void:
 		status_label.text = "Password must be 4-11 letters or numbers."
 		return
 	var result: Dictionary = await BackendApi.create_lobby(room_name, room_password, int(max_players_input.value))
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
 	if not result.get("ok", false):
 		status_label.text = "Create failed: %s" % result.get("error", "Unknown error")
 		return
@@ -97,6 +102,8 @@ func _on_join_pressed() -> void:
 		status_label.text = "Select a room first."
 		return
 	var result: Dictionary = await BackendApi.join_lobby(lobby_id, join_password_input.text)
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
 	if not result.get("ok", false):
 		status_label.text = "Join failed: %s" % result.get("error", "Unknown error")
 		return
@@ -114,6 +121,8 @@ func _on_back_pressed() -> void:
 
 func _refresh_rooms() -> void:
 	var result: Dictionary = await BackendApi.list_lobbies()
+	if not is_instance_valid(self) or not is_inside_tree():
+		return
 	if not result.get("ok", false):
 		status_label.text = "Lobby refresh failed: %s" % result.get("error", "Unknown error")
 		_rooms = []
