@@ -2,15 +2,15 @@ extends Node
 
 @export var listen_port: int = 7777
 @export var max_players: int = 4
-@export var move_speed: float = 6.0
-@export var arena_half_size: float = 14.0
+@export var move_speed: float = 300.0
+@export var arena_half_size: float = 1400.0
 @export var snapshot_rate_hz: float = 20.0
 @export var initial_wave_enemy_count: int = 6
 @export var enemy_spawn_interval: float = 0.8
-@export var enemy_move_speed: float = 1.25
+@export var enemy_move_speed: float = 125.0
 @export var wave_cooldown_sec: float = 3.0
 @export var backend_base_url: String = "http://127.0.0.1:8787"
-@export var backend_server_name: String = "Godot Server"
+@export var backend_server_name: String = "Godot 2D Server"
 @export var advertised_host: String = "127.0.0.1"
 @export var heartbeat_interval_sec: float = 10.0
 @export var registration_retry_interval_sec: float = 3.0
@@ -71,7 +71,7 @@ func _start_server() -> bool:
 	multiplayer.multiplayer_peer = peer
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
-	print("Server listening on ws://0.0.0.0:%d" % listen_port)
+	push_warning("Server listening on ws://0.0.0.0:%d" % listen_port)
 	return true
 
 
@@ -107,15 +107,12 @@ func _step_player_simulation(delta: float) -> void:
 		var intent: Dictionary = _pending_inputs.get(peer_id, {})
 
 		var move_input: Vector2 = intent.get("move", Vector2.ZERO)
-		var move_dir := Vector3(move_input.x, 0.0, move_input.y)
-		if move_dir.length_squared() > 1.0:
-			move_dir = move_dir.normalized()
-		var velocity: Vector3 = move_dir * move_speed
-		var position: Vector3 = state["position"] + velocity * delta
+		var velocity: Vector2 = move_input.normalized() * move_speed
+		var position: Vector2 = state["position"] + velocity * delta
 		position.x = clamp(position.x, -arena_half_size, arena_half_size)
-		position.z = clamp(position.z, -arena_half_size, arena_half_size)
+		position.y = clamp(position.y, -arena_half_size, arena_half_size)
 
-		var aim: Vector3 = state["aim"]
+		var aim: Vector2 = state["aim"]
 		if intent.has("aim"):
 			aim = intent["aim"]
 
@@ -160,7 +157,7 @@ func _sanitize_intent(intent: Dictionary) -> Dictionary:
 	sanitized["shoot"] = bool(intent.get("shoot", false))
 	sanitized["weapon_cycle"] = int(intent.get("weapon_cycle", 0))
 	sanitized["move"] = _sanitize_move(intent.get("move", Vector2.ZERO))
-	sanitized["aim"] = _sanitize_aim(intent.get("aim", Vector3.FORWARD))
+	sanitized["aim"] = _sanitize_aim(intent.get("aim", Vector2.DOWN))
 	return sanitized
 
 
@@ -178,37 +175,35 @@ func _sanitize_move(raw: Variant) -> Vector2:
 	return Vector2.ZERO
 
 
-func _sanitize_aim(raw: Variant) -> Vector3:
-	if raw is Vector3:
-		var aim: Vector3 = raw
-		aim.y = 0.0
+func _sanitize_aim(raw: Variant) -> Vector2:
+	if raw is Vector2:
+		var aim: Vector2 = raw
 		if aim.length_squared() <= 0.0001:
-			return Vector3.FORWARD
+			return Vector2.DOWN
 		return aim.normalized()
-	if raw is Array and raw.size() >= 3:
-		var aim_array := Vector3(float(raw[0]), float(raw[1]), float(raw[2]))
-		aim_array.y = 0.0
+	if raw is Array and raw.size() >= 2:
+		var aim_array := Vector2(float(raw[0]), float(raw[1]))
 		if aim_array.length_squared() <= 0.0001:
-			return Vector3.FORWARD
+			return Vector2.DOWN
 		return aim_array.normalized()
-	return Vector3.FORWARD
+	return Vector2.DOWN
 
 
-func _spawn_position_for_peer(peer_id: int) -> Vector3:
-	var spawn_points: Array[Vector3] = [
-		Vector3(-2.0, 0.0, -2.0),
-		Vector3(2.0, 0.0, -2.0),
-		Vector3(-2.0, 0.0, 2.0),
-		Vector3(2.0, 0.0, 2.0),
+func _spawn_position_for_peer(peer_id: int) -> Vector2:
+	var spawn_points: Array[Vector2] = [
+		Vector2(-200.0, -200.0),
+		Vector2(200.0, -200.0),
+		Vector2(-200.0, 200.0),
+		Vector2(200.0, 200.0),
 	]
 	return spawn_points[(peer_id - 1) % spawn_points.size()]
 
 
-func _new_player_state(spawn_position: Vector3) -> Dictionary:
+func _new_player_state(spawn_position: Vector2) -> Dictionary:
 	return {
 		"position": spawn_position,
-		"velocity": Vector3.ZERO,
-		"aim": Vector3.FORWARD,
+		"velocity": Vector2.ZERO,
+		"aim": Vector2.DOWN,
 		"health": 100,
 		"weapon_index": 0,
 		"last_input_tick": 0,
@@ -256,26 +251,25 @@ func _simulate_enemies(delta: float) -> void:
 		return
 	for enemy_id: String in _enemies.keys():
 		var enemy_state: Dictionary = _enemies[enemy_id]
-		var position: Vector3 = enemy_state.get("position", Vector3.ZERO)
-		var target_position: Vector3 = _find_nearest_player_position(position)
-		var direction: Vector3 = target_position - position
-		direction.y = 0.0
+		var position: Vector2 = enemy_state.get("position", Vector2.ZERO)
+		var target_position: Vector2 = _find_nearest_player_position(position)
+		var direction: Vector2 = target_position - position
 		if direction.length_squared() > 0.0001:
 			direction = direction.normalized()
 			position += direction * enemy_move_speed * delta
 			position.x = clamp(position.x, -arena_half_size, arena_half_size)
-			position.z = clamp(position.z, -arena_half_size, arena_half_size)
+			position.y = clamp(position.y, -arena_half_size, arena_half_size)
 			enemy_state["position"] = position
 			_enemies[enemy_id] = enemy_state
 
 
-func _find_nearest_player_position(from_position: Vector3) -> Vector3:
+func _find_nearest_player_position(from_position: Vector2) -> Vector2:
 	if _players.is_empty():
 		return from_position
-	var closest_position: Vector3 = from_position
+	var closest_position: Vector2 = from_position
 	var closest_distance_sq: float = INF
 	for player_state: Dictionary in _players.values():
-		var player_position: Vector3 = player_state.get("position", from_position)
+		var player_position: Vector2 = player_state.get("position", from_position)
 		var distance_sq: float = from_position.distance_squared_to(player_position)
 		if distance_sq < closest_distance_sq:
 			closest_distance_sq = distance_sq
@@ -283,15 +277,15 @@ func _find_nearest_player_position(from_position: Vector3) -> Vector3:
 	return closest_position
 
 
-func _get_random_edge_position() -> Vector3:
+func _get_random_edge_position() -> Vector2:
 	var side: int = randi() % 4
 	var t: float = randf_range(-arena_half_size, arena_half_size)
-	var offset: float = arena_half_size - 1.0
+	var offset: float = arena_half_size - 100.0
 	match side:
-		0: return Vector3(-offset, 0.0, t)
-		1: return Vector3(offset, 0.0, t)
-		2: return Vector3(t, 0.0, -offset)
-		_: return Vector3(t, 0.0, offset)
+		0: return Vector2(-offset, t)
+		1: return Vector2(offset, t)
+		2: return Vector2(t, -offset)
+		_: return Vector2(t, offset)
 
 
 @rpc("authority", "unreliable")
@@ -325,7 +319,7 @@ func _register_server_in_backend() -> void:
 	if _backend_server_id.is_empty():
 		push_warning("Backend register returned empty server id.")
 		return
-	print("Registered backend server id %s" % _backend_server_id)
+	push_warning("Registered backend server id %s" % _backend_server_id)
 	_heartbeat_timer = 0.0
 	_send_backend_heartbeat()
 

@@ -1,6 +1,6 @@
 # AGENTS.md — Sweaty Candy
 
-Boxhead-inspired 2.5D arcade horde shooter. Godot 4 (GDScript), angled top-down camera, pixel art sprites on a 3D plane. Single-player first, 4-player co-op multiplayer later.
+Boxhead-inspired top-down 2D arcade horde shooter. Godot 4 (GDScript), Camera2D following player, pixel art sprites. Pixel-perfect rendering. Single-player first, 4-player co-op multiplayer later.
 
 ## Architecture
 
@@ -97,11 +97,10 @@ backend/
 ## Game Scene Tree
 
 ```
-Game (Node3D) [game_manager.gd]
-├── Camera3D [camera_follow.gd] — angled top-down, follows player
-├── DirectionalLight3D
-├── Arena (instanced) — 30×30 ground + walls
-├── EntityManager (Node3D)
+Game (Node2D) [game_manager.gd]
+├── Camera2D [camera_follow.gd] — top-down, smooth follow
+├── Arena (StaticBody2D) — 2800×2800 ground + walls
+├── EntityManager (Node2D)
 │   ├── Players/
 │   ├── Enemies/
 │   ├── Projectiles/
@@ -115,11 +114,11 @@ Game (Node3D) [game_manager.gd]
 
 | Layer | Value | Used by |
 |---|---|---|
-| 1 Player | 1 | Player CharacterBody3D |
-| 2 Enemy | 2 | Enemy CharacterBody3D, enemy hitbox Area3D |
-| 3 Projectile | 4 | Projectile Area3D (detects enemies + world) |
-| 4 Pickup | 8 | Pickup Area3D (detects player) |
-| 5 World | 16 | Ground, walls (StaticBody3D) |
+| 1 Player | 1 | Player CharacterBody2D |
+| 2 Enemy | 2 | Enemy CharacterBody2D, enemy hitbox Area2D |
+| 3 Projectile | 4 | Projectile Area2D (detects enemies + world) |
+| 4 Pickup | 8 | Pickup Area2D (detects player) |
+| 5 World | 16 | Ground, walls (StaticBody2D) |
 
 **Key interactions:**
 - Player mask = 18 (enemies + world). Player collides with enemies and walls.
@@ -138,7 +137,7 @@ Game (Node3D) [game_manager.gd]
 - **Engine version**: Godot 4.3+ (use `@export`, `await`, `physical_keycode`).
 - **Rendering**: GL Compatibility (required for web export).
 - **Scene structure**: feature subfolders under `scenes/` and `scripts/`.
-- **Node access**: use `%` unique names for frequently accessed children (HealthComponent, WeaponAnchor, Camera3D, etc.). Avoid deep `get_node()` chains.
+- **Node access**: use `%` unique names for frequently accessed children (HealthComponent, WeaponAnchor, Camera2D, etc.). Avoid deep `get_node()` chains.
 - **Signals**: past-tense verbs (`health_changed`, `died`, `enemy_killed`).
 - **Components**: reusable nodes attached as children (HealthComponent, HitboxComponent, HitFlashComponent).
 - **Multiplayer-ready patterns**: input never directly mutates state. Input → intent → authority validates → state change. All spawning goes through EntityManager.
@@ -146,22 +145,22 @@ Game (Node3D) [game_manager.gd]
 
 ## Gameplay Systems
 
-- **Player**: WASD movement on XZ plane, aim direction = last movement direction. Hold left-click to auto-fire. E/Q cycles weapons.
+- **Player**: WASD movement on XY plane, aim direction = last movement direction. Hold left-click to auto-fire. E/Q cycles weapons.
 - **Weapons**: 4 categories, all extend base `Weapon` class via `@export` properties:
   - **Blaster** — single shot, 4/s, 25 dmg, infinite ammo
-  - **Lobber** — splash damage, 1.5/s, 40 dmg, 3-unit AoE explosion on impact
+  - **Lobber** — splash damage, 1.5/s, 40 dmg, 150-unit AoE explosion on impact
   - **Sprayer** — rapid fire, 12/s, 8 dmg, slight spread
   - **Freezer** — crowd control, 3/s, 10 dmg, slows enemies 50% for 2s
 - **Enemies**: chase nearest player, deal contact damage via HitboxComponent. Knockback on hit. Three variants:
-  - **Base** (red) — 50 HP, speed 1.25, 10 dmg, 100 pts
-  - **Fast** (orange) — 25 HP, speed 2.5, 8 dmg, 150 pts (wave 3+)
-  - **Tank** (purple) — 150 HP, speed 0.7, 20 dmg, 200 pts (wave 5+)
+  - **Base** (red) — 50 HP, speed 125.0, 10 dmg, 100 pts
+  - **Fast** (orange) — 25 HP, speed 250.0, 8 dmg, 150 pts (wave 3+)
+  - **Tank** (purple) — 150 HP, speed 70.0, 20 dmg, 200 pts (wave 5+)
 - **Slow mechanic**: `apply_slow(multiplier, duration)` on enemy_base. `_speed_multiplier` multiplies move_speed. Decays automatically.
 - **Pickups**: health pickups drop from killed enemies (15% chance). Restores 25 HP.
 - **Waves**: data-driven configs (5 waves defined, scales after). Mixed enemy types from wave 3+. 3s cooldown between waves.
 - **Score**: base points × combo multiplier (x1→x4). Combo increments on kills within 2s, resets after timeout.
-- **Camera**: Camera3D at offset (0, 18, 12) with smooth follow. ~56° downward angle.
-- **Juice**: hit flash on enemy damage (white flash 0.1s), death particles (expanding spheres).
+- **Camera**: Camera2D with smooth follow and zoom level (2.0, 2.0).
+- **Juice**: hit flash on enemy damage (white flash 0.1s), death particles (expanding circles).
 
 ## Multiplayer Systems
 
@@ -212,10 +211,13 @@ GUEST_SESSION_DURATION_MS=3600000 npm start  # Run backend with 1h guest session
 - **Web + ENet**: raw ENet UDP does not work in browsers. Use `WebSocketMultiplayerPeer` for web clients (multiplayer phase).
 - **State sync**: never let clients set their own position/health. Server validates and broadcasts.
 - **Enemy-enemy collision**: enemies don't collide with each other (mask doesn't include layer 2).
-- **Projectile tunneling**: at very high speeds, Area3D projectiles can skip over enemies. Sprayer at 30 u/s is safe at 60 FPS.
+- **Projectile tunneling**: at very high speeds, Area2D projectiles can skip over enemies. Sprayer at 300 u/s is safe at 60 FPS.
 - **Export templates**: must match the exact Godot version.
 - **Weapon cycling**: `weapon_scenes` array order in game.tscn determines cycle order. Blaster must be first (index 0 = starting weapon).
-- **Lobber explosion**: uses `PhysicsDirectSpaceState3D.intersect_shape()` with a sphere query. Runs on the physics layer mask 2 (enemies only).
+- **Lobber explosion**: uses `PhysicsDirectSpaceState2D.intersect_shape()` with a circle query. Runs on the physics layer mask 2 (enemies only).
 - **Guest session expiry**: `_save_auth_to_config` must preserve `created_at` for guests. Refresh endpoint only works for guests. Expiry check runs before every auth-required request.
 - **ConfigFile path**: auth stored in `user://config/auth.cfg` (per-user, cross-platform). Never `res://`.
 - **Lobby password**: 4-11 alphanumeric chars only. Hashed with same PBKDF2 as user passwords.
+- **Camera2D smoothing**: ensure `position_smoothing_enabled` is set to `true` for smooth camera follow.
+- **Sprite filtering**: disable texture filtering on sprites for pixel-perfect rendering.
+- **Performance with many Sprite2D nodes**: use sprite atlases or merge sprites when possible for better performance.

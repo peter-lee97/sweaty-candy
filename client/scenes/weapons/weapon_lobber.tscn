@@ -1,8 +1,0 @@
-[gd_scene load_steps=3 format=3]
-
-[ext_resource type="Script" path="res://scripts/weapons/weapon_lobber.gd" id="wp"]
-[ext_resource type="PackedScene" path="res://scenes/projectiles/projectile_lobber.tscn" id="proj"]
-
-[node name="WeaponLobber" type="Node3D"]
-script = ExtResource("wp")
-projectile_scene = ExtResource("proj")

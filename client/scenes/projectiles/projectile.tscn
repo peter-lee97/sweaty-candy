@@ -1,31 +1,21 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/projectiles/projectile.gd" id="proj_script"]
+[ext_resource type="Script" path="res://scripts/projectiles/projectile.gd" id="1_script"]
 
-[sub_resource type="SphereShape3D" id="SphereShape3D_proj"]
-radius = 0.1
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_proj"]
+size = Vector2(8, 8)
 
-[sub_resource type="StandardMaterial3D" id="Material_proj"]
-albedo_color = Color(1.0, 0.9, 0.1, 1.0)
-emission_enabled = true
-emission = Color(1.0, 0.8, 0.0, 1.0)
-
-[sub_resource type="SphereMesh" id="SphereMesh_proj"]
-radius = 0.08
-height = 0.16
-
-[node name="Projectile" type="Area3D"]
+[node name="Projectile" type="Area2D"]
 collision_layer = 4
 collision_mask = 18
-monitoring = true
-monitorable = false
-script = ExtResource("proj_script")
+script = ExtResource("1_script")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-shape = SubResource("SphereShape3D_proj")
+[node name="Sprite" type="ColorRect" parent="."]
+size = Vector2(8, 8)
+position = Vector2(-4, -4)
+color = Color(1.0, 0.9, 0.1, 1.0)
 
-[node name="Mesh" type="MeshInstance3D" parent="."]
-material_override = SubResource("Material_proj")
-mesh = SubResource("SphereMesh_proj")
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_proj")
 
 [connection signal="body_entered" from="." to="." method="_on_body_entered"]

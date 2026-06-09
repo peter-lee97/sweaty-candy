@@ -1,97 +1,54 @@
 extends CanvasLayer
 
-@onready var health_bar: ProgressBar = %HealthBar
-@onready var score_label: Label = %ScoreLabel
-@onready var wave_label: Label = %WaveLabel
-@onready var combo_label: Label = %ComboLabel
-@onready var weapon_label: Label = %WeaponLabel
-@onready var pause_toggle_button: Button = %PauseToggleButton
-@onready var exit_hold_button: Button = %ExitHoldButton
-
-const EXIT_HOLD_DURATION: float = 1.25
-
-var _holding_exit: bool = false
-var _exit_hold_elapsed: float = 0.0
-var _exit_triggered: bool = false
-var _pause_pressed_last_frame: bool = false
+@onready var _health_bar: ProgressBar = %HealthBar
+@onready var _wave_label: Label = %WaveLabel
+@onready var _game_over_label: Label = %GameOverLabel
+@onready var _restart_label: Label = %RestartLabel
+@onready var _win_label: Label = %WinLabel
 
 
 func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_ALWAYS
-	GameEvents.player_health_changed.connect(_on_health_changed)
-	GameEvents.score_updated.connect(_on_score_updated)
+	GameEvents.player_health_changed.connect(_on_player_health_changed)
+	GameEvents.player_died.connect(_on_player_died)
 	GameEvents.wave_started.connect(_on_wave_started)
-	GameEvents.weapon_changed.connect(_on_weapon_changed)
-	GameEvents.pause_state_changed.connect(_on_pause_state_changed)
-	pause_toggle_button.pressed.connect(_on_pause_button_pressed)
-	exit_hold_button.button_down.connect(_on_exit_hold_started)
-	exit_hold_button.button_up.connect(_on_exit_hold_released)
-	pause_toggle_button.process_mode = Node.PROCESS_MODE_ALWAYS
-	exit_hold_button.process_mode = Node.PROCESS_MODE_ALWAYS
-	pause_toggle_button.text = "▶"
-	exit_hold_button.text = "⏻"
-	_on_pause_state_changed(false)
+	GameEvents.game_won.connect(_on_game_won)
+	_game_over_label.hide()
+	_restart_label.hide()
+	_win_label.hide()
 
 
-func _process(delta: float) -> void:
-	_handle_pause_hotkey()
-	if not _holding_exit or _exit_triggered:
-		return
-	_exit_hold_elapsed += delta
-	var ratio: float = clamp(_exit_hold_elapsed / EXIT_HOLD_DURATION, 0.0, 1.0)
-	exit_hold_button.text = "⏻ %d%%" % int(ratio * 100.0)
-	if _exit_hold_elapsed >= EXIT_HOLD_DURATION:
-		_exit_triggered = true
-		_holding_exit = false
-		exit_hold_button.text = "⏻"
-		GameEvents.exit_to_menu_requested.emit()
+func _process(_delta: float) -> void:
+	if Input.is_action_just_pressed("shoot") and (_game_over_label.visible or _win_label.visible):
+		get_tree().reload_current_scene()
 
 
-func _on_health_changed(current: int, maximum: int) -> void:
-	health_bar.max_value = maximum
-	health_bar.value = current
+func _on_player_health_changed(current: int, max_hp: int) -> void:
+	_health_bar.max_value = max_hp
+	_health_bar.value = current
 
 
-func _on_score_updated(new_score: int, new_combo: int) -> void:
-	score_label.text = "Score: %d" % new_score
-	if new_combo > 1:
-		combo_label.text = "x%d COMBO" % new_combo
-		combo_label.visible = true
+func _on_player_died() -> void:
+	_game_over_label.show()
+	_restart_label.show()
+
+
+func _on_wave_started(wave: int) -> void:
+	_wave_label.text = "Wave %d" % wave
+
+
+func _on_game_won() -> void:
+	var player: Node2D = _find_player()
+	if player:
+		_wave_label.text = "Wave %d" % (get_node("/root/Game/WaveManager")._current_wave if has_node("/root/Game/WaveManager") else 0)
+		_win_label.show()
+		_restart_label.show()
 	else:
-		combo_label.visible = false
+		_game_over_label.show()
+		_restart_label.show()
 
 
-func _on_wave_started(wave_number: int) -> void:
-	wave_label.text = "Wave %d" % wave_number
-
-
-func _on_weapon_changed(weapon_name: String) -> void:
-	weapon_label.text = weapon_name
-
-
-func _on_pause_state_changed(paused: bool) -> void:
-	pause_toggle_button.text = "⏸" if paused else "▶"
-
-
-func _on_pause_button_pressed() -> void:
-	GameEvents.pause_toggle_requested.emit()
-
-
-func _handle_pause_hotkey() -> void:
-	var pause_pressed_now: bool = Input.is_action_pressed("pause")
-	if pause_pressed_now and not _pause_pressed_last_frame:
-		GameEvents.pause_toggle_requested.emit()
-	_pause_pressed_last_frame = pause_pressed_now
-
-
-func _on_exit_hold_started() -> void:
-	_holding_exit = true
-	_exit_hold_elapsed = 0.0
-	_exit_triggered = false
-
-
-func _on_exit_hold_released() -> void:
-	_holding_exit = false
-	_exit_hold_elapsed = 0.0
-	if not _exit_triggered:
-		exit_hold_button.text = "⏻"
+func _find_player() -> Node2D:
+	var players: Array[Node] = get_tree().get_nodes_in_group("player")
+	if players.is_empty():
+		return null
+	return players[0]

@@ -1,65 +1,139 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=11 format=3 uid="uid://cgame001"]
 
-[ext_resource type="Script" path="res://scripts/game/game_manager.gd" id="gm"]
-[ext_resource type="Script" path="res://scripts/player/camera_follow.gd" id="cam"]
-[ext_resource type="Script" path="res://scripts/game/entity_manager.gd" id="em"]
-[ext_resource type="Script" path="res://scripts/game/wave_manager.gd" id="wm"]
-[ext_resource type="Script" path="res://scripts/game/score_manager.gd" id="sm"]
-[ext_resource type="PackedScene" path="res://scenes/game/arena.tscn" id="arena"]
-[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="player"]
-[ext_resource type="PackedScene" path="res://scenes/weapons/weapon_blaster.tscn" id="blaster"]
-[ext_resource type="PackedScene" path="res://scenes/weapons/weapon_lobber.tscn" id="lobber"]
-[ext_resource type="PackedScene" path="res://scenes/weapons/weapon_sprayer.tscn" id="sprayer"]
-[ext_resource type="PackedScene" path="res://scenes/weapons/weapon_freezer.tscn" id="freezer"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/enemy_base.tscn" id="enemy"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/enemy_fast.tscn" id="enemy_fast"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/enemy_tank.tscn" id="enemy_tank"]
-[ext_resource type="PackedScene" path="res://scenes/pickups/health_pickup.tscn" id="health_pickup"]
-[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="hud"]
+[ext_resource type="Script" path="res://scripts/game/game_manager.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/game/wave_manager.gd" id="2_wave_script"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/enemy.tscn" id="3_enemy"]
+[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="4_hud_script"]
+[ext_resource type="Script" path="res://scripts/player/camera_follow.gd" id="5_camera_script"]
 
-[node name="Game" type="Node3D"]
-script = ExtResource("gm")
-player_scene = ExtResource("player")
-weapon_scenes = [ExtResource("blaster"), ExtResource("lobber"), ExtResource("sprayer"), ExtResource("freezer")]
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wall_h"]
+size = Vector2(2840.0, 20.0)
 
-[node name="Camera3D" type="Camera3D" parent="."]
-unique_name_in_owner = true
-current = true
-fov = 50.0
-script = ExtResource("cam")
-offset = Vector3(0, 18, 12)
-smoothing = 8.0
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wall_v"]
+size = Vector2(20.0, 2840.0)
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 20, 0)
-light_energy = 0.8
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health"]
+bg_color = Color(0.8, 0.2, 0.2, 1.0)
 
-[node name="Arena" parent="." instance=ExtResource("arena")]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health_fill"]
+bg_color = Color(0.2, 0.8, 0.2, 1.0)
 
-[node name="EntityManager" type="Node3D" parent="."]
-unique_name_in_owner = true
-script = ExtResource("em")
+[sub_resource type="Theme" id="Theme_hud"]
+ProgressBar/styles/background = SubResource("StyleBoxFlat_health")
+ProgressBar/styles/fill = SubResource("StyleBoxFlat_health_fill")
 
-[node name="Players" type="Node3D" parent="EntityManager"]
+[node name="Game" type="Node2D"]
+script = ExtResource("1_script")
 
-[node name="Enemies" type="Node3D" parent="EntityManager"]
+[node name="Camera2D" type="Camera2D" parent="."]
+position_smoothing_enabled = true
+zoom = Vector2(2, 2)
+process_callback = 1
+script = ExtResource("5_camera_script")
 
-[node name="Projectiles" type="Node3D" parent="EntityManager"]
+[node name="Arena" type="StaticBody2D" parent="." groups=["world"]]
+collision_layer = 16
+collision_mask = 0
 
-[node name="Pickups" type="Node3D" parent="EntityManager"]
+[node name="Ground" type="ColorRect" parent="Arena"]
+size = Vector2(2800, 2800)
+position = Vector2(-1400, -1400)
+color = Color(0.15, 0.15, 0.18, 1.0)
+
+[node name="WallTop" type="CollisionShape2D" parent="Arena"]
+position = Vector2(0, -1410)
+shape = SubResource("RectangleShape2D_wall_h")
+
+[node name="WallBottom" type="CollisionShape2D" parent="Arena"]
+position = Vector2(0, 1410)
+shape = SubResource("RectangleShape2D_wall_h")
+
+[node name="WallLeft" type="CollisionShape2D" parent="Arena"]
+position = Vector2(-1410, 0)
+shape = SubResource("RectangleShape2D_wall_v")
+
+[node name="WallRight" type="CollisionShape2D" parent="Arena"]
+position = Vector2(1410, 0)
+shape = SubResource("RectangleShape2D_wall_v")
 
 [node name="WaveManager" type="Node" parent="."]
 unique_name_in_owner = true
-script = ExtResource("wm")
-enemy_scene = ExtResource("enemy")
-enemy_fast_scene = ExtResource("enemy_fast")
-enemy_tank_scene = ExtResource("enemy_tank")
-health_pickup_scene = ExtResource("health_pickup")
-health_drop_chance = 0.15
+script = ExtResource("2_wave_script")
+enemy_scene = ExtResource("3_enemy")
 
-[node name="ScoreManager" type="Node" parent="."]
+[node name="PlayerSpawn" type="Marker2D" parent="."]
 unique_name_in_owner = true
-script = ExtResource("sm")
 
-[node name="HUD" parent="." instance=ExtResource("hud")]
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("4_hud_script")
+
+[node name="HealthBar" type="ProgressBar" parent="HUD"]
 unique_name_in_owner = true
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 220.0
+offset_bottom = 45.0
+theme_override_styles/background = SubResource("StyleBoxFlat_health")
+theme_override_styles/fill = SubResource("StyleBoxFlat_health_fill")
+show_percentage = false
+value = 100.0
+
+[node name="WaveLabel" type="Label" parent="HUD"]
+unique_name_in_owner = true
+offset_left = 20.0
+offset_top = 55.0
+offset_right = 200.0
+offset_bottom = 75.0
+text = "Wave 1"
+horizontal_alignment = 0
+
+[node name="GameOverLabel" type="Label" parent="HUD"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -50.0
+offset_right = 100.0
+offset_bottom = -20.0
+text = "GAME OVER"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 36
+theme_override_colors/font_color = Color(0.9, 0.2, 0.2, 1.0)
+
+[node name="WinLabel" type="Label" parent="HUD"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -50.0
+offset_right = 100.0
+offset_bottom = -20.0
+text = "YOU WIN!"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 36
+theme_override_colors/font_color = Color(0.2, 0.9, 0.2, 1.0)
+
+[node name="RestartLabel" type="Label" parent="HUD"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -10.0
+offset_right = 150.0
+offset_bottom = 20.0
+text = "Click to restart"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1.0)
