@@ -8,16 +8,26 @@
 
 config_version=5
 
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
 [application]
 
 config/name="Sweaty Candy"
-config/features=PackedStringArray("4.3", "GL Compatibility")
+run/main_scene="res://scenes/ui/main_menu.tscn"
+config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
-run/main_scene="res://scenes/game/game.tscn"
 
 [autoload]
 
 GameEvents="*res://scripts/autoload/game_events.gd"
+
+[display]
+
+window/size/viewport_width=1024
+window/size/viewport_height=768
+window/stretch/mode="canvas_items"
 
 [input]
 
@@ -53,12 +63,5 @@ shoot={
 
 [rendering]
 
-renderer/rendering_method="gl_compatibility"
 textures/canvas_textures/default_texture_filter=0
-
-[display]
-
-window/size/viewport_width=1024
-window/size/viewport_height=768
-window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
+renderer/rendering_method="gl_compatibility"

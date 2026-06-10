@@ -4,18 +4,27 @@ extends CharacterBody2D
 @export var max_health: int = 50
 @export var contact_damage: int = 10
 @export var contact_cooldown: float = 0.5
+@export var knockback_strength: float = 300.0
+@export var enemy_color: Color = Color(0.9, 0.2, 0.2, 1.0)
+@export var enemy_size: Vector2 = Vector2(24, 24)
 
-var health: int = max_health
+var health: int
 var _contact_timer: float = 0.0
-
-@onready var _sprite: ColorRect = %Sprite
+var _is_dead: bool = false
+var _is_knocked_back: bool = false
 
 
 func _ready() -> void:
 	health = max_health
+	%Sprite.size = enemy_size
+	%Sprite.position = -enemy_size / 2.0
+	%Sprite.color = enemy_color
 
 
 func _physics_process(delta: float) -> void:
+	if _is_knocked_back:
+		return
+
 	_contact_timer -= delta
 
 	var player: Node2D = _find_nearest_player()
@@ -35,13 +44,36 @@ func _find_nearest_player() -> Node2D:
 	return players[0]
 
 
-func take_damage(amount: int) -> void:
+func _apply_knockback(dir: Vector2) -> void:
+	_is_knocked_back = true
+	var knock_dir := dir.normalized()
+	var target_pos := global_position + knock_dir * 15.0
+	var tween := create_tween()
+	tween.tween_property(self, "global_position", target_pos, 0.08)
+	tween.tween_callback(func(): _is_knocked_back = false)
+
+
+func take_damage(amount: int, from_dir: Vector2 = Vector2.ZERO) -> void:
+	if _is_dead:
+		return
 	health -= amount
+	_flash_hit()
 	if health <= 0:
 		_die()
+	elif from_dir != Vector2.ZERO:
+		_apply_knockback(from_dir)
+
+
+func _flash_hit() -> void:
+	var tween := create_tween()
+	tween.tween_property(%Sprite, "color", Color.WHITE, 0.05)
+	tween.tween_property(%Sprite, "color", enemy_color, 0.1)
 
 
 func _die() -> void:
+	if _is_dead:
+		return
+	_is_dead = true
 	GameEvents.enemy_killed.emit(global_position)
 	queue_free()
 

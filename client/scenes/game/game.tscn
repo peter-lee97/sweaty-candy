@@ -1,10 +1,14 @@
-[gd_scene load_steps=11 format=3 uid="uid://cgame001"]
+[gd_scene load_steps=15 format=3 uid="uid://cgame001"]
 
 [ext_resource type="Script" path="res://scripts/game/game_manager.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/game/wave_manager.gd" id="2_wave_script"]
 [ext_resource type="PackedScene" path="res://scenes/enemies/enemy.tscn" id="3_enemy"]
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="4_hud_script"]
 [ext_resource type="Script" path="res://scripts/player/camera_follow.gd" id="5_camera_script"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/enemy_fast.tscn" id="6_fast_enemy"]
+[ext_resource type="PackedScene" path="res://scenes/enemies/enemy_tank.tscn" id="7_tank_enemy"]
+[ext_resource type="PackedScene" path="res://scenes/pickups/health_pickup.tscn" id="8_pickup"]
+[ext_resource type="PackedScene" path="res://scenes/ui/exit_button.tscn" id="9_exit"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_wall_h"]
 size = Vector2(2840.0, 20.0)
@@ -27,13 +31,17 @@ script = ExtResource("1_script")
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position_smoothing_enabled = true
-zoom = Vector2(2, 2)
 process_callback = 1
 script = ExtResource("5_camera_script")
 
 [node name="Arena" type="StaticBody2D" parent="." groups=["world"]]
 collision_layer = 16
 collision_mask = 0
+
+[node name="Border" type="ColorRect" parent="Arena"]
+size = Vector2(2840, 2840)
+position = Vector2(-1420, -1420)
+color = Color(0.3, 0.3, 0.35, 1.0)
 
 [node name="Ground" type="ColorRect" parent="Arena"]
 size = Vector2(2800, 2800)
@@ -60,6 +68,9 @@ shape = SubResource("RectangleShape2D_wall_v")
 unique_name_in_owner = true
 script = ExtResource("2_wave_script")
 enemy_scene = ExtResource("3_enemy")
+enemy_fast_scene = ExtResource("6_fast_enemy")
+enemy_tank_scene = ExtResource("7_tank_enemy")
+health_pickup_scene = ExtResource("8_pickup")
 
 [node name="PlayerSpawn" type="Marker2D" parent="."]
 unique_name_in_owner = true
@@ -86,6 +97,24 @@ offset_right = 200.0
 offset_bottom = 75.0
 text = "Wave 1"
 horizontal_alignment = 0
+
+[node name="StatsLabel" type="Label" parent="HUD"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -200.0
+offset_top = -140.0
+offset_right = 200.0
+offset_bottom = -110.0
+text = ""
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0.9, 0.9, 0.4, 1.0)
+
+[node name="ExitButton" parent="HUD" instance=ExtResource("9_exit")]
 
 [node name="GameOverLabel" type="Label" parent="HUD"]
 unique_name_in_owner = true

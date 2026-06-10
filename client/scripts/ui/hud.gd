@@ -5,16 +5,20 @@ extends CanvasLayer
 @onready var _game_over_label: Label = %GameOverLabel
 @onready var _restart_label: Label = %RestartLabel
 @onready var _win_label: Label = %WinLabel
+@onready var _stats_label: Label = %StatsLabel
+
+var _current_wave: int = 0
 
 
 func _ready() -> void:
 	GameEvents.player_health_changed.connect(_on_player_health_changed)
 	GameEvents.player_died.connect(_on_player_died)
 	GameEvents.wave_started.connect(_on_wave_started)
-	GameEvents.game_won.connect(_on_game_won)
+	GameEvents.game_completed.connect(_on_game_completed)
 	_game_over_label.hide()
 	_restart_label.hide()
 	_win_label.hide()
+	_stats_label.hide()
 
 
 func _process(_delta: float) -> void:
@@ -29,22 +33,24 @@ func _on_player_health_changed(current: int, max_hp: int) -> void:
 
 func _on_player_died() -> void:
 	_game_over_label.show()
-	_restart_label.show()
 
 
 func _on_wave_started(wave: int) -> void:
+	_current_wave = wave
 	_wave_label.text = "Wave %d" % wave
 
 
-func _on_game_won() -> void:
-	var player: Node2D = _find_player()
-	if player:
-		_wave_label.text = "Wave %d" % (get_node("/root/Game/WaveManager")._current_wave if has_node("/root/Game/WaveManager") else 0)
+func _on_game_completed(won: bool, time_sec: float, _accuracy: float, shots_fired: int, shots_hit: int) -> void:
+	var minutes: int = int(max(0.0, time_sec)) / 60
+	var seconds: int = int(max(0.0, time_sec)) % 60
+	var missed: int = shots_fired - shots_hit
+	var accuracy: float = float(shots_hit) / max(1.0, float(shots_fired))
+	_stats_label.text = "Time: %d:%02d   Shots: %d hit / %d missed / %d total   Accuracy: %.0f%%" % [minutes, seconds, shots_hit, missed, shots_fired, accuracy * 100.0]
+	_stats_label.show()
+	if won:
+		_wave_label.text = "All waves cleared!"
 		_win_label.show()
-		_restart_label.show()
-	else:
-		_game_over_label.show()
-		_restart_label.show()
+	_restart_label.show()
 
 
 func _find_player() -> Node2D:

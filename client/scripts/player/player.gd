@@ -9,11 +9,9 @@ var shoot_cooldown: float = 0.25
 var _shoot_timer: float = 0.0
 var _aim_direction: Vector2 = Vector2.DOWN
 
-@onready var _sprite: ColorRect = %Sprite
-
 
 func _ready() -> void:
-	health = max_health
+	pass
 
 
 func _physics_process(delta: float) -> void:
@@ -25,7 +23,7 @@ func _physics_process(delta: float) -> void:
 		_aim_direction = input_dir
 
 	_shoot_timer -= delta
-	if Input.is_action_pressed("shoot") and _shoot_timer <= 0.0:
+	if Input.is_action_pressed("shoot") and _shoot_timer <= 0.0 and not GameEvents.ui_blocking_input:
 		_shoot()
 		_shoot_timer = shoot_cooldown
 
@@ -37,6 +35,7 @@ func _shoot() -> void:
 	projectile.global_position = global_position
 	projectile.set_direction(_aim_direction)
 	get_tree().current_scene.add_child(projectile)
+	GameEvents.projectile_fired.emit()
 
 
 func take_damage(amount: int) -> void:
@@ -44,6 +43,11 @@ func take_damage(amount: int) -> void:
 	GameEvents.player_health_changed.emit(health, max_health)
 	if health <= 0:
 		_die()
+
+
+func heal(amount: int) -> void:
+	health = min(health + amount, max_health)
+	GameEvents.player_health_changed.emit(health, max_health)
 
 
 func _die() -> void:

@@ -1,0 +1,23 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/exit_button.gd" id="1_script"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty"]
+
+[node name="ExitButton" type="Button"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -44.0
+offset_right = -4.0
+offset_top = 8.0
+offset_bottom = 40.0
+text = "X"
+script = ExtResource("1_script")
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.8, 0.3, 0.3, 1.0)
+theme_override_colors/font_hover_color = Color(1.0, 0.2, 0.2, 1.0)
+theme_override_styles/normal = SubResource("StyleBoxEmpty")
+theme_override_styles/hover = SubResource("StyleBoxEmpty")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty")
+theme_override_styles/focus = SubResource("StyleBoxEmpty")
