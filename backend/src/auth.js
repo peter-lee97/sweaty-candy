@@ -29,9 +29,17 @@ export function generateGuestId() {
   return `guest_${timestamp}_${random}`;
 }
 
-export function generateGuestUsername(fruits, colors) {
-  const fruit = fruits[Math.floor(Math.random() * fruits.length)];
-  const color = colors[Math.floor(Math.random() * colors.length)];
-  const suffix = Math.floor(Math.random() * 1000).toString().padStart(3, "0");
-  return `${fruit}${color}${suffix}`;
+export function generateGuestUsername(fruits, colors, store) {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const fruit = fruits[Math.floor(Math.random() * fruits.length)];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const suffix = Math.floor(Math.random() * 900 + 100).toString();
+    const username = fruit + color + suffix;
+    const collidesRegistered = store.users.some((u) => u.username.toLowerCase() === username.toLowerCase());
+    const collidesGuest = Object.values(store.guestSessions).some((s) => s.username.toLowerCase() === username.toLowerCase());
+    if (!collidesRegistered && !collidesGuest) {
+      return username;
+    }
+  }
+  return fruits[Math.floor(Math.random() * fruits.length)] + colors[Math.floor(Math.random() * colors.length)] + Date.now().toString().slice(-3);
 }

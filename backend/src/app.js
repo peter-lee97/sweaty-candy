@@ -193,12 +193,7 @@ function createBackendServer() {
       }
 
       if (pathname === "/v1/auth/guest" && method === "POST") {
-        const username = generateGuestUsername(["apple", "banana", "cherry", "grape", "kiwi", "lemon", "mango", "orange", "peach", "plum"], ["red", "blue", "green", "yellow", "purple", "orange", "pink", "white", "black", "teal"]);
-        const usernameTaken = store.users.some((u) => u.username.toLowerCase() === username.toLowerCase());
-        const activeGuestUsernames = Object.values(store.guestSessions).map((s) => s.username);
-        if (usernameTaken || activeGuestUsernames.includes(username)) {
-          return json(res, 409, { error: "username already exists, please try again" });
-        }
+        const username = generateGuestUsername(["apple", "banana", "cherry", "grape", "kiwi", "lemon", "mango", "orange", "peach", "plum"], ["red", "blue", "green", "yellow", "purple", "orange", "pink", "white", "black", "teal"], store);
         const guestId = generateGuestId();
         const createdAt = Date.now();
         const expiresAt = createdAt + GUEST_SESSION_DURATION_MS;

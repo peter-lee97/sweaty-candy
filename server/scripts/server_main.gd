@@ -92,13 +92,19 @@ func _on_peer_disconnected(peer_id: int) -> void:
 
 
 @rpc("any_peer", "unreliable")
-func submit_player_intent(intent: Dictionary) -> void:
+func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, weapon_cycle: int) -> void:
 	if not multiplayer.is_server():
 		return
 	var peer_id: int = multiplayer.get_remote_sender_id()
 	if not _players.has(peer_id):
 		return
-	_pending_inputs[peer_id] = _sanitize_intent(intent)
+	_pending_inputs[peer_id] = {
+		"tick": tick,
+		"move": move,
+		"aim": aim,
+		"shoot": shoot,
+		"weapon_cycle": weapon_cycle
+	}
 
 
 func _step_player_simulation(delta: float) -> void:
@@ -149,44 +155,6 @@ func _notify_lobby_state() -> void:
 		"wave": _current_wave,
 	}
 	rpc("receive_lobby_state", payload)
-
-
-func _sanitize_intent(intent: Dictionary) -> Dictionary:
-	var sanitized: Dictionary = {}
-	sanitized["tick"] = int(intent.get("tick", 0))
-	sanitized["shoot"] = bool(intent.get("shoot", false))
-	sanitized["weapon_cycle"] = int(intent.get("weapon_cycle", 0))
-	sanitized["move"] = _sanitize_move(intent.get("move", Vector2.ZERO))
-	sanitized["aim"] = _sanitize_aim(intent.get("aim", Vector2.DOWN))
-	return sanitized
-
-
-func _sanitize_move(raw: Variant) -> Vector2:
-	if raw is Vector2:
-		var move: Vector2 = raw
-		if move.length_squared() > 1.0:
-			move = move.normalized()
-		return move
-	if raw is Array and raw.size() >= 2:
-		var move := Vector2(float(raw[0]), float(raw[1]))
-		if move.length_squared() > 1.0:
-			move = move.normalized()
-		return move
-	return Vector2.ZERO
-
-
-func _sanitize_aim(raw: Variant) -> Vector2:
-	if raw is Vector2:
-		var aim: Vector2 = raw
-		if aim.length_squared() <= 0.0001:
-			return Vector2.DOWN
-		return aim.normalized()
-	if raw is Array and raw.size() >= 2:
-		var aim_array := Vector2(float(raw[0]), float(raw[1]))
-		if aim_array.length_squared() <= 0.0001:
-			return Vector2.DOWN
-		return aim_array.normalized()
-	return Vector2.DOWN
 
 
 func _spawn_position_for_peer(peer_id: int) -> Vector2:
@@ -288,12 +256,12 @@ func _get_random_edge_position() -> Vector2:
 		_: return Vector2(t, offset)
 
 
-@rpc("authority", "unreliable")
+@rpc("any_peer", "call_remote", "unreliable")
 func receive_server_snapshot(_payload: Dictionary) -> void:
 	pass
 
 
-@rpc("authority", "reliable")
+@rpc("any_peer", "call_remote", "reliable")
 func receive_lobby_state(_payload: Dictionary) -> void:
 	pass
 

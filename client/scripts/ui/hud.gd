@@ -23,7 +23,11 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	if Input.is_action_just_pressed("shoot") and (_game_over_label.visible or _win_label.visible):
-		get_tree().reload_current_scene()
+		if GameData.multiplayer_session_active:
+			GameData.clear_multiplayer_session()
+			get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")
+		else:
+			get_tree().reload_current_scene()
 
 
 func _on_player_health_changed(current: int, max_hp: int) -> void:
@@ -45,7 +49,8 @@ func _on_game_completed(won: bool, time_sec: float, _accuracy: float, shots_fire
 	var seconds: int = int(max(0.0, time_sec)) % 60
 	var missed: int = shots_fired - shots_hit
 	var accuracy: float = float(shots_hit) / max(1.0, float(shots_fired))
-	_stats_label.text = "Time: %d:%02d   Shots: %d hit / %d missed / %d total   Accuracy: %.0f%%" % [minutes, seconds, shots_hit, missed, shots_fired, accuracy * 100.0]
+	var stats_str: String = "Time: " + str(minutes) + ":" + ("%02d" % seconds) + "   Shots: " + str(shots_hit) + " hit / " + str(missed) + " missed / " + str(shots_fired) + " total   Accuracy: " + str(int(accuracy * 100.0)) + "%"
+	_stats_label.text = stats_str
 	_stats_label.show()
 	if won:
 		_wave_label.text = "All waves cleared!"

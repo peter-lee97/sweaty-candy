@@ -7,6 +7,7 @@ extends CharacterBody2D
 @export var knockback_strength: float = 300.0
 @export var enemy_color: Color = Color(0.9, 0.2, 0.2, 1.0)
 @export var enemy_size: Vector2 = Vector2(24, 24)
+@export var network_controlled: bool = false
 
 var health: int
 var _contact_timer: float = 0.0
@@ -22,6 +23,10 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if network_controlled:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
 	if _is_knocked_back:
 		return
 

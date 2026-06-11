@@ -22,11 +22,14 @@ config/icon="res://icon.svg"
 [autoload]
 
 GameEvents="*res://scripts/autoload/game_events.gd"
+GameData="*res://scripts/autoload/game_data.gd"
+BackendApi="*res://scripts/autoload/backend_api.gd"
+NetworkClient="*res://scripts/network_client.gd"
 
 [display]
 
-window/size/viewport_width=1024
-window/size/viewport_height=768
+window/size/viewport_width=1600
+window/size/viewport_height=900
 window/stretch/mode="canvas_items"
 
 [input]

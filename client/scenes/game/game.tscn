@@ -1,70 +1,71 @@
-[gd_scene load_steps=15 format=3 uid="uid://cgame001"]
+[gd_scene format=3 uid="uid://cgame001"]
 
-[ext_resource type="Script" path="res://scripts/game/game_manager.gd" id="1_script"]
-[ext_resource type="Script" path="res://scripts/game/wave_manager.gd" id="2_wave_script"]
+[ext_resource type="Script" uid="uid://dao114cb3p8hc" path="res://scripts/game/game_manager.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://6opo8mwivqj2" path="res://scripts/game/wave_manager.gd" id="2_wave_script"]
 [ext_resource type="PackedScene" path="res://scenes/enemies/enemy.tscn" id="3_enemy"]
-[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="4_hud_script"]
-[ext_resource type="Script" path="res://scripts/player/camera_follow.gd" id="5_camera_script"]
+[ext_resource type="Script" uid="uid://d2udwhih3mm3k" path="res://scripts/ui/hud.gd" id="4_hud_script"]
+[ext_resource type="Script" uid="uid://cdi5v1crtwn5m" path="res://scripts/player/camera_follow.gd" id="5_camera_script"]
 [ext_resource type="PackedScene" path="res://scenes/enemies/enemy_fast.tscn" id="6_fast_enemy"]
 [ext_resource type="PackedScene" path="res://scenes/enemies/enemy_tank.tscn" id="7_tank_enemy"]
 [ext_resource type="PackedScene" path="res://scenes/pickups/health_pickup.tscn" id="8_pickup"]
 [ext_resource type="PackedScene" path="res://scenes/ui/exit_button.tscn" id="9_exit"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_wall_h"]
-size = Vector2(2840.0, 20.0)
+size = Vector2(2840, 20)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_wall_v"]
-size = Vector2(20.0, 2840.0)
+size = Vector2(20, 2840)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health"]
-bg_color = Color(0.8, 0.2, 0.2, 1.0)
+bg_color = Color(0.8, 0.2, 0.2, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health_fill"]
-bg_color = Color(0.2, 0.8, 0.2, 1.0)
+bg_color = Color(0.2, 0.8, 0.2, 1)
 
-[sub_resource type="Theme" id="Theme_hud"]
-ProgressBar/styles/background = SubResource("StyleBoxFlat_health")
-ProgressBar/styles/fill = SubResource("StyleBoxFlat_health_fill")
-
-[node name="Game" type="Node2D"]
+[node name="Game" type="Node2D" unique_id=2145505912]
 script = ExtResource("1_script")
 
-[node name="Camera2D" type="Camera2D" parent="."]
+[node name="TileMapLayer" type="TileMapLayer" parent="." unique_id=1723739002]
+
+[node name="Camera2D" type="Camera2D" parent="." unique_id=1374788432]
 position_smoothing_enabled = true
-process_callback = 1
 script = ExtResource("5_camera_script")
 
-[node name="Arena" type="StaticBody2D" parent="." groups=["world"]]
+[node name="Arena" type="StaticBody2D" parent="." unique_id=945835166 groups=["world"]]
 collision_layer = 16
 collision_mask = 0
 
-[node name="Border" type="ColorRect" parent="Arena"]
-size = Vector2(2840, 2840)
-position = Vector2(-1420, -1420)
-color = Color(0.3, 0.3, 0.35, 1.0)
+[node name="Border" type="ColorRect" parent="Arena" unique_id=791127694]
+offset_left = -1420.0
+offset_top = -1420.0
+offset_right = 1420.0
+offset_bottom = 1420.0
+color = Color(0.3, 0.3, 0.35, 1)
 
-[node name="Ground" type="ColorRect" parent="Arena"]
-size = Vector2(2800, 2800)
-position = Vector2(-1400, -1400)
-color = Color(0.15, 0.15, 0.18, 1.0)
+[node name="Ground" type="ColorRect" parent="Arena" unique_id=1693376052]
+offset_left = -1400.0
+offset_top = -1400.0
+offset_right = 1400.0
+offset_bottom = 1400.0
+color = Color(0.15, 0.15, 0.18, 1)
 
-[node name="WallTop" type="CollisionShape2D" parent="Arena"]
+[node name="WallTop" type="CollisionShape2D" parent="Arena" unique_id=474106291]
 position = Vector2(0, -1410)
 shape = SubResource("RectangleShape2D_wall_h")
 
-[node name="WallBottom" type="CollisionShape2D" parent="Arena"]
+[node name="WallBottom" type="CollisionShape2D" parent="Arena" unique_id=1033280046]
 position = Vector2(0, 1410)
 shape = SubResource("RectangleShape2D_wall_h")
 
-[node name="WallLeft" type="CollisionShape2D" parent="Arena"]
+[node name="WallLeft" type="CollisionShape2D" parent="Arena" unique_id=44264062]
 position = Vector2(-1410, 0)
 shape = SubResource("RectangleShape2D_wall_v")
 
-[node name="WallRight" type="CollisionShape2D" parent="Arena"]
+[node name="WallRight" type="CollisionShape2D" parent="Arena" unique_id=397912009]
 position = Vector2(1410, 0)
 shape = SubResource("RectangleShape2D_wall_v")
 
-[node name="WaveManager" type="Node" parent="."]
+[node name="WaveManager" type="Node" parent="." unique_id=1085738586]
 unique_name_in_owner = true
 script = ExtResource("2_wave_script")
 enemy_scene = ExtResource("3_enemy")
@@ -72,13 +73,20 @@ enemy_fast_scene = ExtResource("6_fast_enemy")
 enemy_tank_scene = ExtResource("7_tank_enemy")
 health_pickup_scene = ExtResource("8_pickup")
 
-[node name="PlayerSpawn" type="Marker2D" parent="."]
+[node name="PlayerSpawn" type="Marker2D" parent="." unique_id=373802600]
 unique_name_in_owner = true
 
-[node name="HUD" type="CanvasLayer" parent="."]
+[node name="EntityContainer" type="Node2D" parent="." unique_id=1984937077]
+unique_name_in_owner = true
+
+[node name="Players" type="Node2D" parent="EntityContainer" unique_id=1099272114]
+
+[node name="Enemies" type="Node2D" parent="EntityContainer" unique_id=791543494]
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1125374998]
 script = ExtResource("4_hud_script")
 
-[node name="HealthBar" type="ProgressBar" parent="HUD"]
+[node name="HealthBar" type="ProgressBar" parent="HUD" unique_id=1208201283]
 unique_name_in_owner = true
 offset_left = 20.0
 offset_top = 20.0
@@ -86,21 +94,20 @@ offset_right = 220.0
 offset_bottom = 45.0
 theme_override_styles/background = SubResource("StyleBoxFlat_health")
 theme_override_styles/fill = SubResource("StyleBoxFlat_health_fill")
-show_percentage = false
 value = 100.0
+show_percentage = false
 
-[node name="WaveLabel" type="Label" parent="HUD"]
+[node name="WaveLabel" type="Label" parent="HUD" unique_id=106953412]
 unique_name_in_owner = true
 offset_left = 20.0
 offset_top = 55.0
 offset_right = 200.0
 offset_bottom = 75.0
 text = "Wave 1"
-horizontal_alignment = 0
 
-[node name="StatsLabel" type="Label" parent="HUD"]
+[node name="StatsLabel" type="Label" parent="HUD" unique_id=1642736728]
 unique_name_in_owner = true
-anchors_preset = 8
+anchors_preset = 7
 anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
@@ -109,14 +116,13 @@ offset_left = -200.0
 offset_top = -140.0
 offset_right = 200.0
 offset_bottom = -110.0
-text = ""
-horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.9, 0.9, 0.4, 1)
 theme_override_font_sizes/font_size = 20
-theme_override_colors/font_color = Color(0.9, 0.9, 0.4, 1.0)
+horizontal_alignment = 1
 
-[node name="ExitButton" parent="HUD" instance=ExtResource("9_exit")]
+[node name="ExitButton" parent="HUD" unique_id=1621529152 instance=ExtResource("9_exit")]
 
-[node name="GameOverLabel" type="Label" parent="HUD"]
+[node name="GameOverLabel" type="Label" parent="HUD" unique_id=1458967569]
 unique_name_in_owner = true
 anchors_preset = 8
 anchor_left = 0.5
@@ -127,13 +133,13 @@ offset_left = -100.0
 offset_top = -50.0
 offset_right = 100.0
 offset_bottom = -20.0
+theme_override_colors/font_color = Color(0.9, 0.2, 0.2, 1)
+theme_override_font_sizes/font_size = 36
 text = "GAME OVER"
 horizontal_alignment = 1
 vertical_alignment = 1
-theme_override_font_sizes/font_size = 36
-theme_override_colors/font_color = Color(0.9, 0.2, 0.2, 1.0)
 
-[node name="WinLabel" type="Label" parent="HUD"]
+[node name="WinLabel" type="Label" parent="HUD" unique_id=1448005617]
 unique_name_in_owner = true
 anchors_preset = 8
 anchor_left = 0.5
@@ -144,13 +150,13 @@ offset_left = -100.0
 offset_top = -50.0
 offset_right = 100.0
 offset_bottom = -20.0
+theme_override_colors/font_color = Color(0.2, 0.9, 0.2, 1)
+theme_override_font_sizes/font_size = 36
 text = "YOU WIN!"
 horizontal_alignment = 1
 vertical_alignment = 1
-theme_override_font_sizes/font_size = 36
-theme_override_colors/font_color = Color(0.2, 0.9, 0.2, 1.0)
 
-[node name="RestartLabel" type="Label" parent="HUD"]
+[node name="RestartLabel" type="Label" parent="HUD" unique_id=1515583369]
 unique_name_in_owner = true
 anchors_preset = 8
 anchor_left = 0.5
@@ -161,8 +167,8 @@ offset_left = -150.0
 offset_top = -10.0
 offset_right = 150.0
 offset_bottom = 20.0
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 18
 text = "Click to restart"
 horizontal_alignment = 1
 vertical_alignment = 1
-theme_override_font_sizes/font_size = 18
-theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1.0)

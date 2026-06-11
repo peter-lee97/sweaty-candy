@@ -1,0 +1,146 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/lobby.gd" id="1_script"]
+
+[node name="Lobby" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.08, 0.08, 0.12, 1.0)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 40.0
+offset_top = 20.0
+offset_right = -40.0
+offset_bottom = -20.0
+
+[node name="Title" type="Label" parent="VBoxContainer"]
+text = "Game Lobbies"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 38
+theme_override_colors/font_color = Color(0.9, 0.4, 0.2, 1.0)
+
+[node name="Spacer" type="Control" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 20)
+
+[node name="ButtonRow" type="HBoxContainer" parent="VBoxContainer"]
+
+[node name="CreateButton" type="Button" parent="VBoxContainer/ButtonRow"]
+text = "Create Room"
+theme_override_font_sizes/font_size = 20
+
+[node name="RefreshButton" type="Button" parent="VBoxContainer/ButtonRow"]
+text = "Refresh"
+theme_override_font_sizes/font_size = 20
+
+[node name="BackButton" type="Button" parent="VBoxContainer/ButtonRow"]
+text = "Back"
+theme_override_font_sizes/font_size = 20
+
+[node name="Spacer2" type="Control" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 14)
+
+[node name="RoomTable" type="Tree" parent="VBoxContainer"]
+unique_name_in_owner = true
+columns = 4
+size_flags_horizontal = 3
+size_flags_vertical = 3
+allow_reselect = true
+theme_override_font_sizes/font_size = 18
+
+[node name="JoinRow" type="HBoxContainer" parent="VBoxContainer"]
+
+[node name="JoinLabel" type="Label" parent="VBoxContainer/JoinRow"]
+text = "Password:"
+theme_override_font_sizes/font_size = 18
+
+[node name="JoinPasswordInput" type="LineEdit" parent="VBoxContainer/JoinRow"]
+unique_name_in_owner = true
+placeholder_text = "leave empty if none"
+theme_override_font_sizes/font_size = 18
+
+[node name="JoinButton" type="Button" parent="VBoxContainer/JoinRow"]
+text = "Join"
+theme_override_font_sizes/font_size = 20
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer"]
+unique_name_in_owner = true
+text = "Loading..."
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.6, 0.6, 0.7, 1.0)
+
+[node name="CreatePopup" type="PopupPanel" parent="."]
+unique_name_in_owner = true
+size = Vector2i(400, 320)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CreatePopup"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -20.0
+
+[node name="PopupTitle" type="Label" parent="CreatePopup/VBoxContainer"]
+text = "Create Room"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 26
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1.0)
+
+[node name="NameLabel" type="Label" parent="CreatePopup/VBoxContainer"]
+text = "Room Name:"
+theme_override_font_sizes/font_size = 18
+
+[node name="RoomNameInput" type="LineEdit" parent="CreatePopup/VBoxContainer"]
+unique_name_in_owner = true
+theme_override_font_sizes/font_size = 18
+
+[node name="PasswordLabel" type="Label" parent="CreatePopup/VBoxContainer"]
+text = "Password (optional, 4-11 chars):"
+theme_override_font_sizes/font_size = 18
+
+[node name="RoomPasswordInput" type="LineEdit" parent="CreatePopup/VBoxContainer"]
+unique_name_in_owner = true
+placeholder_text = "leave empty for public"
+theme_override_font_sizes/font_size = 18
+
+[node name="MaxPlayersRow" type="HBoxContainer" parent="CreatePopup/VBoxContainer"]
+
+[node name="MaxPlayersLabel" type="Label" parent="CreatePopup/VBoxContainer/MaxPlayersRow"]
+text = "Max Players:"
+theme_override_font_sizes/font_size = 18
+
+[node name="MaxPlayersSpin" type="SpinBox" parent="CreatePopup/VBoxContainer/MaxPlayersRow"]
+unique_name_in_owner = true
+min_value = 2.0
+max_value = 6.0
+value = 2.0
+
+[node name="ButtonsRow" type="HBoxContainer" parent="CreatePopup/VBoxContainer"]
+
+[node name="CreateCancelButton" type="Button" parent="CreatePopup/VBoxContainer/ButtonsRow"]
+text = "Cancel"
+theme_override_font_sizes/font_size = 20
+
+[node name="CreateConfirmButton" type="Button" parent="CreatePopup/VBoxContainer/ButtonsRow"]
+text = "Create"
+theme_override_font_sizes/font_size = 20
+
+[connection signal="pressed" from="VBoxContainer/ButtonRow/CreateButton" to="." method="_on_create_pressed"]
+[connection signal="pressed" from="VBoxContainer/ButtonRow/RefreshButton" to="." method="_refresh_rooms"]
+[connection signal="pressed" from="VBoxContainer/ButtonRow/BackButton" to="." method="_on_back_pressed"]
+[connection signal="pressed" from="VBoxContainer/JoinRow/JoinButton" to="." method="_on_join_pressed"]
+[connection signal="pressed" from="CreatePopup/VBoxContainer/ButtonsRow/CreateCancelButton" to="." method="_on_create_cancel_pressed"]
+[connection signal="pressed" from="CreatePopup/VBoxContainer/ButtonsRow/CreateConfirmButton" to="." method="_on_create_confirm_pressed"]
