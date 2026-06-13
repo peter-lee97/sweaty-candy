@@ -1,6 +1,7 @@
 extends Area2D
 
 @export var speed: float = 500.0
+@export var damage: int = 25
 
 var _direction: Vector2 = Vector2.RIGHT
 
@@ -15,4 +16,8 @@ func _physics_process(delta: float) -> void:
 
 func _on_body_entered(body: Node2D) -> void:
 	if body.is_in_group("world"):
+		queue_free()
+	elif body.is_in_group("enemy"):
+		if body.has_method("take_damage"):
+			body.take_damage(damage, global_position.direction_to(body.global_position))
 		queue_free()

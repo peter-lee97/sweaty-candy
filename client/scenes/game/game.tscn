@@ -74,6 +74,10 @@ unique_name_in_owner = true
 
 [node name="Players" type="Node2D" parent="EntityContainer" unique_id=1099272114]
 
+[node name="Enemies" type="Node2D" parent="EntityContainer"]
+
+[node name="Pickups" type="Node2D" parent="EntityContainer"]
+
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1125374998]
 script = ExtResource("4_hud_script")
 

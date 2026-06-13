@@ -11,11 +11,13 @@ var _remote_player_nodes: Dictionary = {}
 func _ready() -> void:
 	GameEvents.player_died.connect(_on_player_died)
 	GameEvents.projectile_fired.connect(_on_projectile_fired)
+	GameEvents.enemy_killed.connect(_on_enemy_killed)
 
 	if GameData.multiplayer_session_active:
 		_setup_network_mode()
 	else:
 		_spawn_player()
+		_spawn_test_enemies()
 
 
 func _setup_network_mode() -> void:
@@ -89,6 +91,22 @@ func _on_projectile_fired() -> void:
 
 func _compute_stats() -> Dictionary:
 	return {"time": 0.0, "accuracy": 0.0, "fired": _shots_fired, "hit": 0}
+
+
+func _spawn_test_enemies() -> void:
+	var enemy_scene: PackedScene = load("res://scenes/enemies/enemy_base.tscn")
+	for i in range(5):
+		var enemy: Node = enemy_scene.instantiate()
+		enemy.global_position = Vector2(randf_range(-600.0, 600.0), randf_range(-600.0, 600.0))
+		%EntityContainer/Enemies.add_child(enemy)
+
+
+func _on_enemy_killed(kill_position: Vector2, _score_value: int) -> void:
+	if randf() < 0.15:
+		var pickup_scene: PackedScene = load("res://scenes/pickups/health_pickup.tscn")
+		var pickup: Area2D = pickup_scene.instantiate()
+		pickup.global_position = kill_position
+		%EntityContainer/Pickups.add_child(pickup)
 
 
 func _on_player_died() -> void:
