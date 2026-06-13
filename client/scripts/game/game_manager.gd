@@ -13,11 +13,12 @@ func _ready() -> void:
 	GameEvents.projectile_fired.connect(_on_projectile_fired)
 	GameEvents.enemy_killed.connect(_on_enemy_killed)
 
+	_spawn_test_enemies()
+
 	if GameData.multiplayer_session_active:
 		_setup_network_mode()
 	else:
 		_spawn_player()
-		_spawn_test_enemies()
 
 
 func _setup_network_mode() -> void:
