@@ -29,7 +29,7 @@ func _shoot() -> void:
 		return
 	if GameData.multiplayer_session_active:
 		return
-	var projectile: Area2D = projectile_scene.instantiate()
+	var projectile = projectile_scene.instantiate()
 	projectile.global_position = global_position
 	projectile.set_direction(_aim_direction)
 	get_tree().current_scene.add_child(projectile)

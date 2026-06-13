@@ -5,7 +5,7 @@
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_proj"]
 size = Vector2(8, 8)
 
-[node name="Projectile" type="Area2D"]
+[node name="Projectile" type="CharacterBody2D"]
 collision_layer = 4
 collision_mask = 18
 script = ExtResource("1_script")
@@ -17,5 +17,3 @@ color = Color(1.0, 0.9, 0.1, 1.0)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_proj")
-
-[connection signal="body_entered" from="." to="." method="_on_body_entered"]

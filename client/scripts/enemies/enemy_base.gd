@@ -5,11 +5,6 @@ extends CharacterBody2D
 @export var score_value: int = 100
 
 var _knockback: Vector2 = Vector2.ZERO
-var _original_color: Color
-
-
-func _ready() -> void:
-	_original_color = $Sprite.modulate
 
 
 func _physics_process(delta: float) -> void:
@@ -37,7 +32,7 @@ func _flash_hit() -> void:
 	await get_tree().create_timer(0.1).timeout
 	if is_queued_for_deletion():
 		return
-	$Sprite.modulate = _original_color
+	$Sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 
 
 func _die() -> void:
