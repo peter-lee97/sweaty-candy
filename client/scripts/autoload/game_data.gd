@@ -20,9 +20,3 @@ func clear_multiplayer_session() -> void:
 	multiplayer_server_url = ""
 	multiplayer_session_active = false
 
-
-func clear_auth() -> void:
-	user_id = ""
-	username = ""
-	token = ""
-	user_type = "guest"

@@ -5,10 +5,6 @@ extends Node
 @export var move_speed: float = 300.0
 @export var arena_half_size: float = 1400.0
 @export var snapshot_rate_hz: float = 20.0
-@export var initial_wave_enemy_count: int = 6
-@export var enemy_spawn_interval: float = 0.8
-@export var enemy_move_speed: float = 125.0
-@export var wave_cooldown_sec: float = 3.0
 @export var backend_base_url: String = "http://127.0.0.1:8787"
 @export var backend_server_name: String = "Godot 2D Server"
 @export var advertised_host: String = "127.0.0.1"
@@ -21,13 +17,6 @@ var _heartbeat_timer: float = 0.0
 var _registration_retry_timer: float = 0.0
 var _players: Dictionary = {}
 var _pending_inputs: Dictionary = {}
-var _enemies: Dictionary = {}
-var _next_enemy_id: int = 1
-var _current_wave: int = 0
-var _enemies_to_spawn: int = 0
-var _enemy_spawn_timer: float = 0.0
-var _wave_cooldown_timer: float = 0.0
-var _is_spawning_wave: bool = false
 var _backend_server_id: String = ""
 var _is_registering_backend: bool = false
 
@@ -36,7 +25,6 @@ func _ready() -> void:
 	var started: bool = _start_server()
 	if started:
 		_register_server_in_backend()
-		_start_next_wave()
 
 
 func _physics_process(delta: float) -> void:
@@ -44,8 +32,6 @@ func _physics_process(delta: float) -> void:
 		return
 	_server_tick += 1
 	_step_player_simulation(delta)
-	_update_wave_state(delta)
-	_simulate_enemies(delta)
 	_snapshot_timer += delta
 	if _snapshot_timer >= (1.0 / snapshot_rate_hz):
 		_snapshot_timer = 0.0
@@ -141,8 +127,6 @@ func _broadcast_snapshot() -> void:
 	var payload: Dictionary = {
 		"server_tick": _server_tick,
 		"players": _players,
-		"enemies": _enemies,
-		"wave": _current_wave,
 	}
 	rpc("receive_server_snapshot", payload)
 
@@ -151,8 +135,6 @@ func _notify_lobby_state() -> void:
 	var payload: Dictionary = {
 		"server_tick": _server_tick,
 		"players": _players,
-		"enemies": _enemies,
-		"wave": _current_wave,
 	}
 	rpc("receive_lobby_state", payload)
 
@@ -177,83 +159,6 @@ func _new_player_state(spawn_position: Vector2) -> Dictionary:
 		"last_input_tick": 0,
 		"wants_shoot": false,
 	}
-
-
-func _update_wave_state(delta: float) -> void:
-	if _is_spawning_wave:
-		_enemy_spawn_timer -= delta
-		if _enemy_spawn_timer <= 0.0 and _enemies_to_spawn > 0:
-			_spawn_enemy()
-			_enemies_to_spawn -= 1
-			_enemy_spawn_timer = enemy_spawn_interval
-		if _enemies_to_spawn <= 0:
-			_is_spawning_wave = false
-		return
-	if _enemies.is_empty():
-		_wave_cooldown_timer += delta
-		if _wave_cooldown_timer >= wave_cooldown_sec:
-			_start_next_wave()
-
-
-func _start_next_wave() -> void:
-	_current_wave += 1
-	_enemies_to_spawn = initial_wave_enemy_count + ((_current_wave - 1) * 2)
-	_enemy_spawn_timer = 0.0
-	_wave_cooldown_timer = 0.0
-	_is_spawning_wave = true
-
-
-func _spawn_enemy() -> void:
-	var enemy_id: String = "e%d" % _next_enemy_id
-	_next_enemy_id += 1
-	_enemies[enemy_id] = {
-		"id": enemy_id,
-		"type": "base",
-		"position": _get_random_edge_position(),
-		"health": 50
-	}
-
-
-func _simulate_enemies(delta: float) -> void:
-	if _enemies.is_empty():
-		return
-	for enemy_id: String in _enemies.keys():
-		var enemy_state: Dictionary = _enemies[enemy_id]
-		var position: Vector2 = enemy_state.get("position", Vector2.ZERO)
-		var target_position: Vector2 = _find_nearest_player_position(position)
-		var direction: Vector2 = target_position - position
-		if direction.length_squared() > 0.0001:
-			direction = direction.normalized()
-			position += direction * enemy_move_speed * delta
-			position.x = clamp(position.x, -arena_half_size, arena_half_size)
-			position.y = clamp(position.y, -arena_half_size, arena_half_size)
-			enemy_state["position"] = position
-			_enemies[enemy_id] = enemy_state
-
-
-func _find_nearest_player_position(from_position: Vector2) -> Vector2:
-	if _players.is_empty():
-		return from_position
-	var closest_position: Vector2 = from_position
-	var closest_distance_sq: float = INF
-	for player_state: Dictionary in _players.values():
-		var player_position: Vector2 = player_state.get("position", from_position)
-		var distance_sq: float = from_position.distance_squared_to(player_position)
-		if distance_sq < closest_distance_sq:
-			closest_distance_sq = distance_sq
-			closest_position = player_position
-	return closest_position
-
-
-func _get_random_edge_position() -> Vector2:
-	var side: int = randi() % 4
-	var t: float = randf_range(-arena_half_size, arena_half_size)
-	var offset: float = arena_half_size - 100.0
-	match side:
-		0: return Vector2(-offset, t)
-		1: return Vector2(offset, t)
-		2: return Vector2(t, -offset)
-		_: return Vector2(t, offset)
 
 
 @rpc("any_peer", "call_remote", "unreliable")

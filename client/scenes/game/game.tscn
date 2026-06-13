@@ -1,13 +1,8 @@
 [gd_scene format=3 uid="uid://cgame001"]
 
 [ext_resource type="Script" uid="uid://dao114cb3p8hc" path="res://scripts/game/game_manager.gd" id="1_script"]
-[ext_resource type="Script" uid="uid://6opo8mwivqj2" path="res://scripts/game/wave_manager.gd" id="2_wave_script"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/enemy.tscn" id="3_enemy"]
 [ext_resource type="Script" uid="uid://d2udwhih3mm3k" path="res://scripts/ui/hud.gd" id="4_hud_script"]
 [ext_resource type="Script" uid="uid://cdi5v1crtwn5m" path="res://scripts/player/camera_follow.gd" id="5_camera_script"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/enemy_fast.tscn" id="6_fast_enemy"]
-[ext_resource type="PackedScene" path="res://scenes/enemies/enemy_tank.tscn" id="7_tank_enemy"]
-[ext_resource type="PackedScene" path="res://scenes/pickups/health_pickup.tscn" id="8_pickup"]
 [ext_resource type="PackedScene" path="res://scenes/ui/exit_button.tscn" id="9_exit"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_wall_h"]
@@ -22,6 +17,12 @@ bg_color = Color(0.8, 0.2, 0.2, 1)
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health_fill"]
 bg_color = Color(0.2, 0.8, 0.2, 1)
 
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_obstacle_1"]
+size = Vector2(800, 40)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_obstacle_23"]
+size = Vector2(600, 40)
+
 [node name="Game" type="Node2D" unique_id=2145505912]
 script = ExtResource("1_script")
 
@@ -31,7 +32,7 @@ script = ExtResource("1_script")
 position_smoothing_enabled = true
 script = ExtResource("5_camera_script")
 
-[node name="Arena" type="StaticBody2D" parent="." unique_id=945835166 groups=["world"]]
+[node name="Arena" type="StaticBody2D" parent="." unique_id=945835166 groups=["world", "obstacle"]]
 collision_layer = 16
 collision_mask = 0
 
@@ -65,14 +66,6 @@ shape = SubResource("RectangleShape2D_wall_v")
 position = Vector2(1410, 0)
 shape = SubResource("RectangleShape2D_wall_v")
 
-[node name="WaveManager" type="Node" parent="." unique_id=1085738586]
-unique_name_in_owner = true
-script = ExtResource("2_wave_script")
-enemy_scene = ExtResource("3_enemy")
-enemy_fast_scene = ExtResource("6_fast_enemy")
-enemy_tank_scene = ExtResource("7_tank_enemy")
-health_pickup_scene = ExtResource("8_pickup")
-
 [node name="PlayerSpawn" type="Marker2D" parent="." unique_id=373802600]
 unique_name_in_owner = true
 
@@ -80,8 +73,6 @@ unique_name_in_owner = true
 unique_name_in_owner = true
 
 [node name="Players" type="Node2D" parent="EntityContainer" unique_id=1099272114]
-
-[node name="Enemies" type="Node2D" parent="EntityContainer" unique_id=791543494]
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1125374998]
 script = ExtResource("4_hud_script")
@@ -96,14 +87,6 @@ theme_override_styles/background = SubResource("StyleBoxFlat_health")
 theme_override_styles/fill = SubResource("StyleBoxFlat_health_fill")
 value = 100.0
 show_percentage = false
-
-[node name="WaveLabel" type="Label" parent="HUD" unique_id=106953412]
-unique_name_in_owner = true
-offset_left = 20.0
-offset_top = 55.0
-offset_right = 200.0
-offset_bottom = 75.0
-text = "Wave 1"
 
 [node name="StatsLabel" type="Label" parent="HUD" unique_id=1642736728]
 unique_name_in_owner = true
@@ -172,3 +155,41 @@ theme_override_font_sizes/font_size = 18
 text = "Click to restart"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="Obstacle1" type="StaticBody2D" parent="." groups=["obstacle"]]
+collision_layer = 16
+collision_mask = 0
+
+[node name="ColorRect" type="ColorRect" parent="Obstacle1"]
+size = Vector2(800, 40)
+position = Vector2(-400, -20)
+color = Color(0.6, 0.3, 0.15, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Obstacle1"]
+shape = SubResource("RectangleShape2D_obstacle_1")
+
+[node name="Obstacle2" type="StaticBody2D" parent="." groups=["obstacle"]]
+position = Vector2(-400, 500)
+collision_layer = 16
+collision_mask = 0
+
+[node name="ColorRect" type="ColorRect" parent="Obstacle2"]
+size = Vector2(600, 40)
+position = Vector2(-300, -20)
+color = Color(0.6, 0.3, 0.15, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Obstacle2"]
+shape = SubResource("RectangleShape2D_obstacle_23")
+
+[node name="Obstacle3" type="StaticBody2D" parent="." groups=["obstacle"]]
+position = Vector2(400, -500)
+collision_layer = 16
+collision_mask = 0
+
+[node name="ColorRect" type="ColorRect" parent="Obstacle3"]
+size = Vector2(600, 40)
+position = Vector2(-300, -20)
+color = Color(0.6, 0.3, 0.15, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Obstacle3"]
+shape = SubResource("RectangleShape2D_obstacle_23")
