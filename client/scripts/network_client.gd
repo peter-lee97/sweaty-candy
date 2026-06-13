@@ -3,7 +3,7 @@ extends Node
 signal connected_to_server
 signal disconnected_from_server
 signal connection_failed(reason: String)
-signal snapshot_received(players: Dictionary)
+signal snapshot_received(snapshot_data: Dictionary)
 
 var _peer: WebSocketMultiplayerPeer
 var _connected: bool = false
@@ -59,9 +59,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 
 @rpc("any_peer", "call_remote", "unreliable")
 func receive_server_snapshot(snapshot_data: Dictionary) -> void:
-	snapshot_received.emit(
-		snapshot_data.get("players", {}),
-	)
+	snapshot_received.emit(snapshot_data)
 
 
 @rpc("any_peer", "unreliable")

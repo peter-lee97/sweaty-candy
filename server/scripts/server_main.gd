@@ -1,5 +1,16 @@
 extends Node
 
+const ENEMY_HP: int = 50
+const ENEMY_MOVE_SPEED: float = 125.0
+const ENEMY_SCORE: int = 100
+const PROJ_SPEED: float = 500.0
+const PROJ_DAMAGE: int = 25
+const PROJ_COOLDOWN: float = 0.25
+const HIT_RADIUS: float = 24.0
+const ENEMY_COUNT: int = 5
+const KNOCKBACK_FORCE: float = 400.0
+const ENEMY_KNOCKBACK_DECAY: float = 8.0
+
 @export var listen_port: int = 7777
 @export var max_players: int = 4
 @export var move_speed: float = 300.0
@@ -19,11 +30,17 @@ var _players: Dictionary = {}
 var _pending_inputs: Dictionary = {}
 var _backend_server_id: String = ""
 var _is_registering_backend: bool = false
+var _player_shoot_timers: Dictionary = {}
+var _enemies: Array[Dictionary] = []
+var _projectiles: Array[Dictionary] = []
+var _next_enemy_id: int = 0
+var _next_proj_id: int = 0
 
 
 func _ready() -> void:
 	var started: bool = _start_server()
 	if started:
+		_spawn_enemies()
 		_register_server_in_backend()
 
 
@@ -32,6 +49,8 @@ func _physics_process(delta: float) -> void:
 		return
 	_server_tick += 1
 	_step_player_simulation(delta)
+	_step_enemy_simulation(delta)
+	_step_projectile_simulation(delta)
 	_snapshot_timer += delta
 	if _snapshot_timer >= (1.0 / snapshot_rate_hz):
 		_snapshot_timer = 0.0
@@ -68,12 +87,14 @@ func _on_peer_connected(peer_id: int) -> void:
 		return
 	_players[peer_id] = _new_player_state(_spawn_position_for_peer(peer_id))
 	_pending_inputs[peer_id] = {}
+	_player_shoot_timers[peer_id] = 0.0
 	_notify_lobby_state()
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
 	_players.erase(peer_id)
 	_pending_inputs.erase(peer_id)
+	_player_shoot_timers.erase(peer_id)
 	_notify_lobby_state()
 
 
@@ -119,6 +140,17 @@ func _step_player_simulation(delta: float) -> void:
 			var weapon_step: int = 1 if weapon_cycle > 0 else -1
 			weapon_index = wrapi(weapon_index + weapon_step, 0, 4)
 
+		# Shoot cooldown and projectile spawning
+		var shoot_timer: float = _player_shoot_timers.get(peer_id, 0.0)
+		shoot_timer -= delta
+		if shoot_timer < 0.0:
+			shoot_timer = 0.0
+		_player_shoot_timers[peer_id] = shoot_timer
+
+		if intent.get("shoot", false) and shoot_timer <= 0.0:
+			_player_shoot_timers[peer_id] = PROJ_COOLDOWN
+			_spawn_projectile(position, aim.normalized(), peer_id)
+
 		state["position"] = position
 		state["velocity"] = velocity
 		state["aim"] = aim
@@ -128,12 +160,123 @@ func _step_player_simulation(delta: float) -> void:
 		_players[peer_id] = state
 
 
+func _step_enemy_simulation(delta: float) -> void:
+	for enemy: Dictionary in _enemies:
+		var target: Dictionary = _find_nearest_player_for(enemy["position"])
+		var dir: Vector2 = Vector2.ZERO
+		if target:
+			dir = enemy["position"].direction_to(target["position"])
+		var knockback: Vector2 = enemy.get("knockback", Vector2.ZERO)
+		enemy["position"] += dir * ENEMY_MOVE_SPEED * delta + knockback * delta
+		knockback = knockback.lerp(Vector2.ZERO, ENEMY_KNOCKBACK_DECAY * delta)
+		if knockback.length_squared() < 4.0:
+			knockback = Vector2.ZERO
+		enemy["knockback"] = knockback
+		enemy["position"].x = clamp(enemy["position"].x, -arena_half_size, arena_half_size)
+		enemy["position"].y = clamp(enemy["position"].y, -arena_half_size, arena_half_size)
+
+
+func _step_projectile_simulation(delta: float) -> void:
+	var proj_indices_to_remove: Array[int] = []
+	var i: int = 0
+	while i < _projectiles.size():
+		var proj: Dictionary = _projectiles[i]
+		proj["position"] += proj["direction"] * PROJ_SPEED * delta
+
+		var should_remove: bool = false
+
+		if abs(proj["position"].x) > arena_half_size or abs(proj["position"].y) > arena_half_size:
+			should_remove = true
+
+		if not should_remove:
+			for enemy: Dictionary in _enemies:
+				if proj["position"].distance_to(enemy["position"]) < HIT_RADIUS:
+					enemy["hp"] -= PROJ_DAMAGE
+					enemy["knockback"] = proj["direction"] * KNOCKBACK_FORCE
+					if enemy["hp"] <= 0:
+						enemy["dead"] = true
+					should_remove = true
+					break
+
+		if should_remove:
+			proj_indices_to_remove.append(i)
+			_projectiles.remove_at(i)
+		else:
+			i += 1
+
+	var enemy_indices_to_remove: Array[int] = []
+	var j: int = 0
+	while j < _enemies.size():
+		if _enemies[j].get("dead", false):
+			enemy_indices_to_remove.append(j)
+			_enemies.remove_at(j)
+		else:
+			j += 1
+
+
 func _broadcast_snapshot() -> void:
 	var payload: Dictionary = {
 		"server_tick": _server_tick,
 		"players": _players,
+		"enemies": {},
+		"projectiles": {},
 	}
+	for enemy: Dictionary in _enemies:
+		payload["enemies"][str(enemy["id"])] = {
+			"position": enemy["position"],
+			"hp": enemy["hp"],
+		}
+	for proj: Dictionary in _projectiles:
+		payload["projectiles"][str(proj["id"])] = {
+			"position": proj["position"],
+			"direction": proj["direction"],
+		}
 	rpc("receive_server_snapshot", payload)
+
+
+func _find_nearest_player_for(from_pos: Vector2) -> Dictionary:
+	var nearest: Dictionary
+	var min_dist: float = INF
+	for peer_id: int in _players.keys():
+		var state: Dictionary = _players[peer_id]
+		var dist: float = from_pos.distance_squared_to(state["position"])
+		if dist < min_dist:
+			min_dist = dist
+			nearest = state
+	return nearest
+
+
+func _spawn_enemy(pos: Vector2) -> int:
+	var eid: int = _next_enemy_id
+	_next_enemy_id += 1
+	_enemies.append({
+		"id": eid,
+		"position": pos,
+		"hp": ENEMY_HP,
+		"score_value": ENEMY_SCORE,
+		"knockback": Vector2.ZERO,
+	})
+	return eid
+
+
+func _spawn_projectile(pos: Vector2, dir: Vector2, _owner_peer: int) -> int:
+	var pid: int = _next_proj_id
+	_next_proj_id += 1
+	_projectiles.append({
+		"id": pid,
+		"position": pos,
+		"direction": dir,
+	})
+	return pid
+
+
+func _spawn_enemies() -> void:
+	for i in range(ENEMY_COUNT):
+		var pos: Vector2 = Vector2(
+			randf_range(-600.0, 600.0),
+			randf_range(-600.0, 600.0)
+		)
+		_spawn_enemy(pos)
 
 
 func _notify_lobby_state() -> void:

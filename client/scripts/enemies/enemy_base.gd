@@ -11,7 +11,13 @@ var _knockback: Vector2 = Vector2.ZERO
 @onready var _vision_ray: RayCast2D = $VisionRay
 
 
+func _ready() -> void:
+	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
+
+
 func _physics_process(delta: float) -> void:
+	if GameData.multiplayer_session_active:
+		return
 	var player := _find_nearest_player()
 	if player and _has_line_of_sight(player) and global_position.distance_to(player.global_position) > MIN_CHASE_DISTANCE:
 		velocity = global_position.direction_to(player.global_position) * move_speed + _knockback
