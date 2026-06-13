@@ -10,6 +10,7 @@ const HIT_RADIUS: float = 24.0
 const ENEMY_COUNT: int = 5
 const KNOCKBACK_FORCE: float = 400.0
 const ENEMY_KNOCKBACK_DECAY: float = 8.0
+const PLAYER_HALF_EXTENT: float = 14.0
 
 @export var listen_port: int = 7777
 @export var max_players: int = 4
@@ -127,8 +128,9 @@ func _step_player_simulation(delta: float) -> void:
 		var move_input: Vector2 = intent.get("move", Vector2.ZERO)
 		var velocity: Vector2 = move_input.normalized() * move_speed
 		var position: Vector2 = state["position"] + velocity * delta
-		position.x = clamp(position.x, -arena_half_size, arena_half_size)
-		position.y = clamp(position.y, -arena_half_size, arena_half_size)
+		var limit: float = arena_half_size - PLAYER_HALF_EXTENT
+		position.x = clamp(position.x, -limit, limit)
+		position.y = clamp(position.y, -limit, limit)
 
 		var aim: Vector2 = state["aim"]
 		if intent.has("aim"):
