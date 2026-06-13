@@ -3,7 +3,6 @@ extends Node2D
 @onready var _player_spawn: Marker2D = %PlayerSpawn
 
 var _shots_fired: int = 0
-var _shots_hit: int = 0
 var _local_player: CharacterBody2D
 var _network_tick: int = 0
 var _remote_player_nodes: Dictionary = {}
@@ -12,7 +11,6 @@ var _remote_player_nodes: Dictionary = {}
 func _ready() -> void:
 	GameEvents.player_died.connect(_on_player_died)
 	GameEvents.projectile_fired.connect(_on_projectile_fired)
-	GameEvents.projectile_hit.connect(_on_projectile_hit)
 
 	if GameData.multiplayer_session_active:
 		_setup_network_mode()
@@ -28,14 +26,7 @@ func _setup_network_mode() -> void:
 
 
 func _on_connected_to_server() -> void:
-	_spawn_local_player()
-
-
-func _spawn_local_player() -> void:
-	var player_scene: PackedScene = load("res://scenes/player/player.tscn")
-	_local_player = player_scene.instantiate()
-	_local_player.global_position = _player_spawn.global_position
-	add_child(_local_player)
+	_spawn_player()
 
 
 func _physics_process(_delta: float) -> void:
@@ -96,13 +87,8 @@ func _on_projectile_fired() -> void:
 	_shots_fired += 1
 
 
-func _on_projectile_hit() -> void:
-	_shots_hit += 1
-
-
 func _compute_stats() -> Dictionary:
-	var accuracy: float = float(_shots_hit) / max(1.0, float(_shots_fired))
-	return {"time": 0.0, "accuracy": accuracy, "fired": _shots_fired, "hit": _shots_hit}
+	return {"time": 0.0, "accuracy": 0.0, "fired": _shots_fired, "hit": 0}
 
 
 func _on_player_died() -> void:

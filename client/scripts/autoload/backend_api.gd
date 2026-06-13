@@ -1,16 +1,11 @@
 extends Node
 
 signal lobby_events_updated(lobbies: Array)
-signal lobby_events_connection_changed(connected: bool)
 
 var _base_url: String = "http://127.0.0.1:8787"
 var _websocket: WebSocketPeer = WebSocketPeer.new()
 var _ws_connected: bool = false
 var _ws_url: String = ""
-
-
-func set_base_url(url: String) -> void:
-	_base_url = url
 
 
 func is_authenticated() -> bool:
@@ -95,7 +90,6 @@ func _process(_delta: float) -> void:
 				lobby_events_updated.emit(json.lobbies)
 	elif state == WebSocketPeer.STATE_CLOSED:
 		_ws_connected = false
-		lobby_events_connection_changed.emit(false)
 
 
 func _request(method: String, path: String, body: Dictionary = {}) -> Dictionary:

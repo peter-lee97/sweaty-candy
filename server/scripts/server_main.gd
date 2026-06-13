@@ -77,6 +77,11 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	_notify_lobby_state()
 
 
+@rpc("any_peer", "call_remote", "unreliable")
+func receive_server_snapshot(_payload: Dictionary) -> void:
+	pass
+
+
 @rpc("any_peer", "unreliable")
 func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, weapon_cycle: int) -> void:
 	if not multiplayer.is_server():
@@ -159,11 +164,6 @@ func _new_player_state(spawn_position: Vector2) -> Dictionary:
 		"last_input_tick": 0,
 		"wants_shoot": false,
 	}
-
-
-@rpc("any_peer", "call_remote", "unreliable")
-func receive_server_snapshot(_payload: Dictionary) -> void:
-	pass
 
 
 @rpc("any_peer", "call_remote", "reliable")
