@@ -18,3 +18,7 @@ color = Color(1.0, 0.2, 0.2, 1.0)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_enemy")
+
+[node name="VisionRay" type="RayCast2D" parent="."]
+collision_mask = 16
+enabled = true
