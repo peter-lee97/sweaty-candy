@@ -58,6 +58,9 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		var pd: Dictionary = players[id]
 		existing_ids.append(str(id))
 		if id == NetworkClient.get_own_peer_id():
+			if _local_player:
+				_local_player.global_position = _local_player.global_position.lerp(
+					pd.get("position", Vector2.ZERO), 0.35)
 			continue
 		if not _remote_player_nodes.has(str(id)):
 			_spawn_remote_player(str(id), pd)
@@ -106,7 +109,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 			_server_projectile_nodes[pid_str] = proj
 		else:
 			var proj: Node = _server_projectile_nodes[pid_str]
-			proj.global_position = proj.global_position.lerp(pd.get("position", Vector2.ZERO), 0.35)
+			proj.global_position = pd.get("position", Vector2.ZERO)
 
 	for pid_str in _server_projectile_nodes.keys():
 		if not existing_proj_ids.has(pid_str):
