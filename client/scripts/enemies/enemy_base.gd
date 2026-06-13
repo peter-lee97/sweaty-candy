@@ -4,6 +4,7 @@ extends CharacterBody2D
 @export var move_speed: float = 125.0
 @export var score_value: int = 100
 @export var detection_range: float = 600.0
+const MIN_CHASE_DISTANCE: float = 32.0
 
 var _knockback: Vector2 = Vector2.ZERO
 
@@ -12,7 +13,7 @@ var _knockback: Vector2 = Vector2.ZERO
 
 func _physics_process(delta: float) -> void:
 	var player := _find_nearest_player()
-	if player and _has_line_of_sight(player):
+	if player and _has_line_of_sight(player) and global_position.distance_to(player.global_position) > MIN_CHASE_DISTANCE:
 		velocity = global_position.direction_to(player.global_position) * move_speed + _knockback
 	else:
 		velocity = _knockback
