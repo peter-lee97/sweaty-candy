@@ -9,9 +9,19 @@ var shoot_cooldown: float = 0.25
 var _shoot_timer: float = 0.0
 var _aim_direction: Vector2 = Vector2.DOWN
 
+var scent_trail: Array = []
+var _scent_timer: float = 0.0
+const SCENT_INTERVAL: float = 0.1
+const SCENT_LIFETIME: float = 3.0
+const MAX_SCENTS: int = 50
+
 
 func _ready() -> void:
 	pass
+
+
+func get_scent_trail() -> Array:
+	return scent_trail
 
 
 func _physics_process(delta: float) -> void:
@@ -26,6 +36,25 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_pressed("shoot") and _shoot_timer <= 0.0 and not GameEvents.ui_blocking_input:
 		_shoot()
 		_shoot_timer = shoot_cooldown
+
+	_update_scent_trail(delta)
+
+
+func _update_scent_trail(delta: float) -> void:
+	_scent_timer += delta
+	if _scent_timer >= SCENT_INTERVAL:
+		_scent_timer = 0.0
+		scent_trail.push_front({"position": global_position, "t": 0.0})
+		while scent_trail.size() > MAX_SCENTS:
+			scent_trail.pop_back()
+
+	var to_remove: Array = []
+	for scent in scent_trail:
+		scent.t += delta
+		if scent.t >= SCENT_LIFETIME:
+			to_remove.append(scent)
+	for scent in to_remove:
+		scent_trail.erase(scent)
 
 
 func _shoot() -> void:

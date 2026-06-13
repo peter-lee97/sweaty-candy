@@ -13,12 +13,6 @@
       "skillPath": "skills/godot-2d-physics/SKILL.md",
       "computedHash": "6631287b97c5d29efb9dfc929552f40d849ed9afe22d07895c1231c22fe41a75"
     },
-    "godot-adapt-3d-to-2d": {
-      "source": "thedivergentai/gd-agentic-skills",
-      "sourceType": "github",
-      "skillPath": "skills/godot-adapt-3d-to-2d/SKILL.md",
-      "computedHash": "705a36f9f59177e29449d694f082aca5a0c37bbffd2d4d86c30ef1eceff4cd77"
-    },
     "godot-autoload-architecture": {
       "source": "thedivergentai/gd-agentic-skills",
       "sourceType": "github",
@@ -30,6 +24,12 @@
       "sourceType": "github",
       "skillPath": "skills/godot-camera-systems/SKILL.md",
       "computedHash": "fd399e7c7e1a926a623fdee92a335d4d88acd73f7785c6652815ee1f4e67916b"
+    },
+    "godot-game-loop-waves": {
+      "source": "thedivergentai/gd-agentic-skills",
+      "sourceType": "github",
+      "skillPath": "skills/godot-game-loop-waves/SKILL.md",
+      "computedHash": "6894331ada3defb604fad34ef3cc27e0bc664d1eca66eb2293592f1aa46a1271"
     },
     "godot-gdscript-mastery": {
       "source": "thedivergentai/gd-agentic-skills",
@@ -48,6 +48,12 @@
       "sourceType": "github",
       "skillPath": "skills/godot-performance-optimization/SKILL.md",
       "computedHash": "e4961facc0318ed6eb7f9a1b31d36bce935b7f16a492e797a5e879732bd2691d"
+    },
+    "godot-tilemap-mastery": {
+      "source": "thedivergentai/gd-agentic-skills",
+      "sourceType": "github",
+      "skillPath": "skills/godot-tilemap-mastery/SKILL.md",
+      "computedHash": "17612ca6727018e6ad162077538c4d01c3707fafd99f192c7481f9a466ebb065"
     },
     "godot-ui-containers": {
       "source": "thedivergentai/gd-agentic-skills",
