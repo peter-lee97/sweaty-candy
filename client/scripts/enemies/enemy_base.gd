@@ -9,10 +9,13 @@ const MIN_CHASE_DISTANCE: float = 32.0
 var _knockback: Vector2 = Vector2.ZERO
 
 @onready var _vision_ray: RayCast2D = $VisionRay
+@onready var _visibility_notifier: VisibleOnScreenNotifier2D = $VisibilityNotifier
 
 
 func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
+	_visibility_notifier.screen_exited.connect(_on_screen_exited)
+	_visibility_notifier.screen_entered.connect(_on_screen_entered)
 
 
 func _physics_process(delta: float) -> void:
@@ -27,6 +30,16 @@ func _physics_process(delta: float) -> void:
 	if _knockback.length() < 2.0:
 		_knockback = Vector2.ZERO
 	move_and_slide()
+
+
+func _on_screen_exited() -> void:
+	if not GameData.multiplayer_session_active:
+		set_physics_process(false)
+
+
+func _on_screen_entered() -> void:
+	if not GameData.multiplayer_session_active:
+		set_physics_process(true)
 
 
 func _has_line_of_sight(target: Node2D) -> bool:

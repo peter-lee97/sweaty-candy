@@ -21,3 +21,6 @@ shape = SubResource("RectangleShape2D_enemy")
 [node name="VisionRay" type="RayCast2D" parent="."]
 collision_mask = 16
 enabled = true
+
+[node name="VisibilityNotifier" type="VisibleOnScreenNotifier2D" parent="."]
+rect = Rect2(-16, -16, 32, 32)

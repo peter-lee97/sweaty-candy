@@ -1,5 +1,8 @@
 extends Node2D
 
+const PROJ_POOL_SIZE: int = 50
+const ENEMY_POOL_SIZE: int = 10
+
 @onready var _player_spawn: Marker2D = %PlayerSpawn
 
 var _shots_fired: int = 0
@@ -8,6 +11,11 @@ var _network_tick: int = 0
 var _remote_player_nodes: Dictionary = {}
 var _server_enemy_nodes: Dictionary = {}
 var _server_projectile_nodes: Dictionary = {}
+var _projectile_pool: Array[Node] = []
+var _enemy_pool: Array[Node] = []
+
+const _enemy_scene: PackedScene = preload("res://scenes/enemies/enemy_base.tscn")
+const _projectile_scene: PackedScene = preload("res://scenes/projectiles/projectile.tscn")
 
 
 func _ready() -> void:
@@ -19,9 +27,58 @@ func _ready() -> void:
 		_spawn_test_enemies()
 
 	if GameData.multiplayer_session_active:
+		_populate_pools()
 		_setup_network_mode()
 	else:
 		_spawn_player()
+
+
+func _populate_pools() -> void:
+	for i in range(PROJ_POOL_SIZE):
+		var proj: Node = _projectile_scene.instantiate()
+		proj.hide()
+		proj.process_mode = Node.PROCESS_MODE_DISABLED
+		add_child(proj)
+		_projectile_pool.append(proj)
+
+	for i in range(ENEMY_POOL_SIZE):
+		var enemy: Node = _enemy_scene.instantiate()
+		enemy.hide()
+		enemy.process_mode = Node.PROCESS_MODE_DISABLED
+		%EntityContainer/Enemies.add_child(enemy)
+		_enemy_pool.append(enemy)
+
+
+func _acquire_proj() -> Node:
+	if _projectile_pool.is_empty():
+		return null
+	var proj: Node = _projectile_pool.pop_back()
+	proj.show()
+	proj.process_mode = Node.PROCESS_MODE_INHERIT
+	proj.set_physics_process(false)
+	return proj
+
+
+func _release_proj(proj: Node) -> void:
+	proj.hide()
+	proj.process_mode = Node.PROCESS_MODE_DISABLED
+	_projectile_pool.append(proj)
+
+
+func _acquire_enemy() -> Node:
+	if _enemy_pool.is_empty():
+		return null
+	var enemy: Node = _enemy_pool.pop_back()
+	enemy.show()
+	enemy.process_mode = Node.PROCESS_MODE_INHERIT
+	enemy.set_physics_process(false)
+	return enemy
+
+
+func _release_enemy(enemy: Node) -> void:
+	enemy.hide()
+	enemy.process_mode = Node.PROCESS_MODE_DISABLED
+	_enemy_pool.append(enemy)
 
 
 func _setup_network_mode() -> void:
@@ -45,10 +102,6 @@ func _physics_process(_delta: float) -> void:
 	var aim_dir: Vector2 = _local_player._aim_direction
 	var wants_shoot: bool = Input.is_action_pressed("shoot") and not GameEvents.ui_blocking_input
 	NetworkClient.send_player_intent(_network_tick, move_dir, aim_dir, wants_shoot, 0)
-
-
-const _enemy_scene: PackedScene = preload("res://scenes/enemies/enemy_base.tscn")
-const _projectile_scene: PackedScene = preload("res://scenes/projectiles/projectile.tscn")
 
 
 func _apply_snapshot(snapshot: Dictionary) -> void:
@@ -80,10 +133,10 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		var ed: Dictionary = server_enemies[eid_str]
 		existing_enemy_ids.append(eid_str)
 		if not _server_enemy_nodes.has(eid_str):
-			var enemy: Node = _enemy_scene.instantiate()
-			enemy.global_position = ed.get("position", Vector2.ZERO)
-			%EntityContainer/Enemies.add_child(enemy)
-			_server_enemy_nodes[eid_str] = enemy
+			var enemy: Node = _acquire_enemy()
+			if enemy:
+				enemy.global_position = ed.get("position", Vector2.ZERO)
+				_server_enemy_nodes[eid_str] = enemy
 		else:
 			var enemy: Node = _server_enemy_nodes[eid_str]
 			enemy.global_position = enemy.global_position.lerp(ed.get("position", Vector2.ZERO), 0.35)
@@ -92,7 +145,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		if not existing_enemy_ids.has(eid_str):
 			var enemy: Node = _server_enemy_nodes[eid_str]
 			GameEvents.enemy_killed.emit(enemy.global_position, 100)
-			enemy.queue_free()
+			_release_enemy(enemy)
 			_server_enemy_nodes.erase(eid_str)
 
 	var server_projectiles: Dictionary = snapshot.get("projectiles", {})
@@ -101,12 +154,12 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		var pd: Dictionary = server_projectiles[pid_str]
 		existing_proj_ids.append(pid_str)
 		if not _server_projectile_nodes.has(pid_str):
-			var proj: Node = _projectile_scene.instantiate()
-			proj.global_position = pd.get("position", Vector2.ZERO)
-			if proj.has_method("set_direction"):
-				proj.set_direction(pd.get("direction", Vector2.RIGHT))
-			add_child(proj)
-			_server_projectile_nodes[pid_str] = proj
+			var proj: Node = _acquire_proj()
+			if proj:
+				proj.global_position = pd.get("position", Vector2.ZERO)
+				if proj.has_method("set_direction"):
+					proj.set_direction(pd.get("direction", Vector2.RIGHT))
+				_server_projectile_nodes[pid_str] = proj
 		else:
 			var proj: Node = _server_projectile_nodes[pid_str]
 			proj.global_position = pd.get("position", Vector2.ZERO)
@@ -114,7 +167,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 	for pid_str in _server_projectile_nodes.keys():
 		if not existing_proj_ids.has(pid_str):
 			var proj: Node = _server_projectile_nodes[pid_str]
-			proj.queue_free()
+			_release_proj(proj)
 			_server_projectile_nodes.erase(pid_str)
 
 
