@@ -5,16 +5,20 @@ extends CanvasLayer
 @onready var _restart_label: Label = %RestartLabel
 @onready var _win_label: Label = %WinLabel
 @onready var _stats_label: Label = %StatsLabel
+@onready var _countdown_label: Label = %CountdownLabel
 
 
 func _ready() -> void:
 	GameEvents.player_health_changed.connect(_on_player_health_changed)
 	GameEvents.player_died.connect(_on_player_died)
 	GameEvents.game_completed.connect(_on_game_completed)
+	GameEvents.countdown_tick.connect(_on_countdown_tick)
+	GameEvents.countdown_finished.connect(_on_countdown_finished)
 	_game_over_label.hide()
 	_restart_label.hide()
 	_win_label.hide()
 	_stats_label.hide()
+	_countdown_label.hide()
 
 
 func _process(_delta: float) -> void:
@@ -46,3 +50,17 @@ func _on_game_completed(won: bool, time_sec: float, _accuracy: float, shots_fire
 	if won:
 		_win_label.show()
 	_restart_label.show()
+
+
+func _on_countdown_tick(seconds_left: int) -> void:
+	if seconds_left > 0:
+		_countdown_label.text = str(seconds_left)
+		_countdown_label.show()
+	else:
+		_countdown_label.text = "GO!"
+		_countdown_label.show()
+
+
+func _on_countdown_finished() -> void:
+	await get_tree().create_timer(0.8).timeout
+	_countdown_label.hide()

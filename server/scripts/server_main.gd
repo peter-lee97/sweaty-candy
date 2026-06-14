@@ -41,8 +41,9 @@ var _next_proj_id: int = 0
 func _ready() -> void:
 	var started: bool = _start_server()
 	if started:
-		_spawn_enemies()
 		_register_server_in_backend()
+		await get_tree().create_timer(5.0).timeout
+		_spawn_enemies()
 
 
 func _physics_process(delta: float) -> void:

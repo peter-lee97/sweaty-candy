@@ -18,6 +18,8 @@ var _enemy_pool: Array[Node] = []
 var _remote_targets: Dictionary = {}
 var _enemy_targets: Dictionary = {}
 var _intent_timer: float = 0.0
+var _spawn_countdown: float = 5.0
+var _last_countdown_tick: int = 5
 
 const _enemy_scene: PackedScene = preload("res://scenes/enemies/enemy_base.tscn")
 const _projectile_scene: PackedScene = preload("res://scenes/projectiles/projectile.tscn")
@@ -27,9 +29,6 @@ func _ready() -> void:
 	GameEvents.player_died.connect(_on_player_died)
 	GameEvents.projectile_fired.connect(_on_projectile_fired)
 	GameEvents.enemy_killed.connect(_on_enemy_killed)
-
-	if not GameData.multiplayer_session_active:
-		_spawn_test_enemies()
 
 	if GameData.multiplayer_session_active:
 		_populate_pools()
@@ -108,6 +107,18 @@ func _physics_process(delta: float) -> void:
 			if node:
 				node.global_position = node.global_position.lerp(
 					_enemy_targets[eid_str], 1.0 - exp(-delta * SMOOTH_RATE))
+
+	if _spawn_countdown > 0.0:
+		_spawn_countdown -= delta
+		var seconds: int = ceili(_spawn_countdown)
+		if seconds != _last_countdown_tick:
+			_last_countdown_tick = seconds
+			GameEvents.countdown_tick.emit(seconds)
+		if _spawn_countdown <= 0.0:
+			_spawn_countdown = 0.0
+			GameEvents.countdown_finished.emit()
+			if not GameData.multiplayer_session_active:
+				_spawn_test_enemies()
 
 	if not GameData.multiplayer_session_active or not _local_player:
 		return
