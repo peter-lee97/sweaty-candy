@@ -12,6 +12,7 @@ func set_direction(dir: Vector2) -> void:
 
 func _physics_process(delta: float) -> void:
 	if GameData.multiplayer_session_active:
+		position += _direction * speed * delta
 		return
 	var collision := move_and_collide(_direction * speed * delta)
 	if collision:

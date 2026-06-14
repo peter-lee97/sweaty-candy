@@ -2,6 +2,8 @@ extends Node2D
 
 const PROJ_POOL_SIZE: int = 50
 const ENEMY_POOL_SIZE: int = 10
+const SMOOTH_RATE: float = 12.0
+const INTENT_SEND_HZ: float = 20.0
 
 @onready var _player_spawn: Marker2D = %PlayerSpawn
 
@@ -13,6 +15,9 @@ var _server_enemy_nodes: Dictionary = {}
 var _server_projectile_nodes: Dictionary = {}
 var _projectile_pool: Array[Node] = []
 var _enemy_pool: Array[Node] = []
+var _remote_targets: Dictionary = {}
+var _enemy_targets: Dictionary = {}
+var _intent_timer: float = 0.0
 
 const _enemy_scene: PackedScene = preload("res://scenes/enemies/enemy_base.tscn")
 const _projectile_scene: PackedScene = preload("res://scenes/projectiles/projectile.tscn")
@@ -55,7 +60,6 @@ func _acquire_proj() -> Node:
 	var proj: Node = _projectile_pool.pop_back()
 	proj.show()
 	proj.process_mode = Node.PROCESS_MODE_INHERIT
-	proj.set_physics_process(false)
 	return proj
 
 
@@ -92,16 +96,33 @@ func _on_connected_to_server() -> void:
 	_spawn_player()
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if not GameData.multiplayer_session_active or not _local_player:
 		return
 	if not NetworkClient.has_connection():
 		return
 	_network_tick += 1
+
 	var move_dir: Vector2 = _local_player.velocity.normalized() if _local_player.velocity.length_squared() > 0.01 else Vector2.ZERO
 	var aim_dir: Vector2 = _local_player._aim_direction
 	var wants_shoot: bool = Input.is_action_pressed("shoot") and not GameEvents.ui_blocking_input
-	NetworkClient.send_player_intent(_network_tick, move_dir, aim_dir, wants_shoot, 0)
+
+	_intent_timer += delta
+	if _intent_timer >= 1.0 / INTENT_SEND_HZ:
+		_intent_timer -= 1.0 / INTENT_SEND_HZ
+		NetworkClient.send_player_intent(_network_tick, move_dir, aim_dir, wants_shoot, 0)
+
+	for node_id in _remote_targets:
+		var node: CharacterBody2D = _remote_player_nodes.get(node_id)
+		if node:
+			node.global_position = node.global_position.lerp(
+				_remote_targets[node_id], 1.0 - exp(-delta * SMOOTH_RATE))
+
+	for eid_str in _enemy_targets:
+		var node: Node = _server_enemy_nodes.get(eid_str)
+		if node:
+			node.global_position = node.global_position.lerp(
+				_enemy_targets[eid_str], 1.0 - exp(-delta * SMOOTH_RATE))
 
 
 func _apply_snapshot(snapshot: Dictionary) -> void:
@@ -112,18 +133,22 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		existing_ids.append(str(id))
 		if id == NetworkClient.get_own_peer_id():
 			if _local_player:
-				_local_player.global_position = _local_player.global_position.lerp(
-					pd.get("position", Vector2.ZERO), 0.35)
+				var server_pos: Vector2 = pd.get("position", _local_player.global_position)
+				var error: float = _local_player.global_position.distance_to(server_pos)
+				if error > 48.0:
+					_local_player.global_position = server_pos
+				elif error > 4.0:
+					_local_player.global_position = _local_player.global_position.lerp(server_pos, 0.3)
 			continue
 		if not _remote_player_nodes.has(str(id)):
 			_spawn_remote_player(str(id), pd)
 		else:
-			var node: CharacterBody2D = _remote_player_nodes[str(id)]
-			node.global_position = node.global_position.lerp(pd.get("position", Vector2.ZERO), 0.35)
+			_remote_targets[str(id)] = pd.get("position", Vector2.ZERO)
 
 	for id in _remote_player_nodes.keys():
 		if not existing_ids.has(id):
 			var node: Node = _remote_player_nodes[id]
+			_remote_targets.erase(id)
 			node.queue_free()
 			_remote_player_nodes.erase(id)
 
@@ -137,13 +162,12 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 			if enemy:
 				enemy.global_position = ed.get("position", Vector2.ZERO)
 				_server_enemy_nodes[eid_str] = enemy
-		else:
-			var enemy: Node = _server_enemy_nodes[eid_str]
-			enemy.global_position = enemy.global_position.lerp(ed.get("position", Vector2.ZERO), 0.35)
+		_enemy_targets[eid_str] = ed.get("position", Vector2.ZERO)
 
 	for eid_str in _server_enemy_nodes.keys():
 		if not existing_enemy_ids.has(eid_str):
 			var enemy: Node = _server_enemy_nodes[eid_str]
+			_enemy_targets.erase(eid_str)
 			GameEvents.enemy_killed.emit(enemy.global_position, 100)
 			_release_enemy(enemy)
 			_server_enemy_nodes.erase(eid_str)
@@ -160,9 +184,6 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 				if proj.has_method("set_direction"):
 					proj.set_direction(pd.get("direction", Vector2.RIGHT))
 				_server_projectile_nodes[pid_str] = proj
-		else:
-			var proj: Node = _server_projectile_nodes[pid_str]
-			proj.global_position = pd.get("position", Vector2.ZERO)
 
 	for pid_str in _server_projectile_nodes.keys():
 		if not existing_proj_ids.has(pid_str):
@@ -180,6 +201,7 @@ func _spawn_remote_player(id: String, data: Dictionary) -> void:
 	node.set_meta("network_id", id)
 	add_child(node)
 	_remote_player_nodes[id] = node
+	_remote_targets[id] = data.get("position", Vector2.ZERO)
 
 
 func _spawn_player() -> void:
@@ -187,6 +209,12 @@ func _spawn_player() -> void:
 	_local_player = player_scene.instantiate()
 	_local_player.global_position = _player_spawn.global_position
 	add_child(_local_player)
+
+	var camera: Node = get_node("Camera2D")
+	if camera:
+		camera.get_parent().remove_child(camera)
+		_local_player.add_child(camera)
+		camera.position = Vector2.ZERO
 
 
 func _on_disconnected_from_server() -> void:
