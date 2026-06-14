@@ -273,11 +273,7 @@ func _spawn_projectile(pos: Vector2, dir: Vector2, _owner_peer: int) -> int:
 
 
 func _spawn_enemies() -> void:
-	for i in range(ENEMY_COUNT):
-		var pos: Vector2 = Vector2(
-			randf_range(-600.0, 600.0),
-			randf_range(-600.0, 600.0)
-		)
+	for pos: Vector2 in [Vector2(-700.0, -700.0), Vector2(700.0, 700.0)]:
 		_spawn_enemy(pos)
 
 

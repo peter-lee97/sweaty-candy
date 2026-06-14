@@ -97,6 +97,18 @@ func _on_connected_to_server() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if GameData.multiplayer_session_active:
+		for node_id in _remote_targets:
+			var node: CharacterBody2D = _remote_player_nodes.get(node_id)
+			if node:
+				node.global_position = node.global_position.lerp(
+					_remote_targets[node_id], 1.0 - exp(-delta * SMOOTH_RATE))
+		for eid_str in _enemy_targets:
+			var node: Node = _server_enemy_nodes.get(eid_str)
+			if node:
+				node.global_position = node.global_position.lerp(
+					_enemy_targets[eid_str], 1.0 - exp(-delta * SMOOTH_RATE))
+
 	if not GameData.multiplayer_session_active or not _local_player:
 		return
 	if not NetworkClient.has_connection():
@@ -111,18 +123,6 @@ func _physics_process(delta: float) -> void:
 	if _intent_timer >= 1.0 / INTENT_SEND_HZ:
 		_intent_timer -= 1.0 / INTENT_SEND_HZ
 		NetworkClient.send_player_intent(_network_tick, move_dir, aim_dir, wants_shoot, 0)
-
-	for node_id in _remote_targets:
-		var node: CharacterBody2D = _remote_player_nodes.get(node_id)
-		if node:
-			node.global_position = node.global_position.lerp(
-				_remote_targets[node_id], 1.0 - exp(-delta * SMOOTH_RATE))
-
-	for eid_str in _enemy_targets:
-		var node: Node = _server_enemy_nodes.get(eid_str)
-		if node:
-			node.global_position = node.global_position.lerp(
-				_enemy_targets[eid_str], 1.0 - exp(-delta * SMOOTH_RATE))
 
 
 func _apply_snapshot(snapshot: Dictionary) -> void:
@@ -231,9 +231,9 @@ func _compute_stats() -> Dictionary:
 
 func _spawn_test_enemies() -> void:
 	var enemy_scene: PackedScene = load("res://scenes/enemies/enemy_base.tscn")
-	for i in range(5):
+	for pos: Vector2 in [%EnemySpawnTL.global_position, %EnemySpawnBR.global_position]:
 		var enemy: Node = enemy_scene.instantiate()
-		enemy.global_position = Vector2(randf_range(-600.0, 600.0), randf_range(-600.0, 600.0))
+		enemy.global_position = pos
 		%EntityContainer/Enemies.add_child(enemy)
 
 
