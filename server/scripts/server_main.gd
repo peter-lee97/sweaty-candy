@@ -3,17 +3,25 @@ extends Node
 const ENEMY_HP: int = 50
 const ENEMY_MOVE_SPEED: float = 125.0
 const ENEMY_SCORE: int = 100
+const ENEMY_CONTACT_DAMAGE: int = 10
 const PROJ_SPEED: float = 500.0
 const PROJ_DAMAGE: int = 25
 const PROJ_COOLDOWN: float = 0.25
 const HIT_RADIUS: float = 18.0
-const ENEMY_COUNT: int = 5
 const KNOCKBACK_FORCE: float = 400.0
 const ENEMY_KNOCKBACK_DECAY: float = 8.0
 const PLAYER_HALF_EXTENT: float = 14.0
-const ENEMY_CONTACT_DAMAGE: int = 10
 const ENEMY_HIT_RATE: float = 0.5
 const CONTACT_RADIUS: float = 28.0
+const ENEMY_FAST_HP: int = 25
+const ENEMY_FAST_SPEED: float = 250.0
+const ENEMY_FAST_DAMAGE: int = 8
+const ENEMY_FAST_SCORE: int = 150
+const ENEMY_TANK_HP: int = 150
+const ENEMY_TANK_SPEED: float = 70.0
+const ENEMY_TANK_DAMAGE: int = 20
+const ENEMY_TANK_SCORE: int = 200
+const WAVE_DELAY: float = 3.0
 
 @export var listen_port: int = 7777
 @export var max_players: int = 4
@@ -39,14 +47,46 @@ var _enemies: Array[Dictionary] = []
 var _projectiles: Array[Dictionary] = []
 var _next_enemy_id: int = 0
 var _next_proj_id: int = 0
+var _current_wave: int = 0
+var _wave_slots_remaining: int = 0
+var _wave_delay_timer: float = 0.0
 
 
 func _ready() -> void:
 	var started: bool = _start_server()
 	if started:
 		_register_server_in_backend()
-		await get_tree().create_timer(5.0).timeout
-		_spawn_enemies()
+		_spawn_countdown_finished()
+
+
+func _spawn_countdown_finished() -> void:
+	await get_tree().create_timer(5.0).timeout
+	_start_wave(1)
+
+
+func _start_wave(wave: int) -> void:
+	_current_wave = wave
+	_wave_slots_remaining = 0
+	_wave_delay_timer = 0.0
+	var types: Array[String] = _get_wave_types(wave)
+	var spawn_positions: Array[Vector2] = [
+		Vector2(-600.0, -200.0),
+		Vector2(600.0, 200.0),
+	]
+	for pos: Vector2 in spawn_positions:
+		for t: String in types:
+			_spawn_enemy(pos, t)
+			_wave_slots_remaining += 1
+	push_warning("SERVER: Wave %d started (%d enemies)" % [wave, _wave_slots_remaining])
+
+
+func _get_wave_types(wave: int) -> Array[String]:
+	if wave < 3:
+		return ["base", "base"]
+	elif wave < 5:
+		return ["base", "fast"]
+	else:
+		return ["fast", "tank"]
 
 
 func _physics_process(delta: float) -> void:
@@ -60,6 +100,15 @@ func _physics_process(delta: float) -> void:
 	if _snapshot_timer >= (1.0 / snapshot_rate_hz):
 		_snapshot_timer = 0.0
 		_broadcast_snapshot()
+
+	if _wave_slots_remaining <= 0:
+		_wave_delay_timer += delta
+		if _wave_delay_timer >= WAVE_DELAY:
+			_wave_delay_timer = 0.0
+			_start_wave(_current_wave + 1)
+	else:
+		_wave_delay_timer = 0.0
+
 	if _backend_server_id.is_empty():
 		_registration_retry_timer += delta
 		if _registration_retry_timer >= registration_retry_interval_sec and not _is_registering_backend:
@@ -146,7 +195,6 @@ func _step_player_simulation(delta: float) -> void:
 			var weapon_step: int = 1 if weapon_cycle > 0 else -1
 			weapon_index = wrapi(weapon_index + weapon_step, 0, 4)
 
-		# Shoot cooldown and projectile spawning
 		var shoot_timer: float = _player_shoot_timers.get(peer_id, 0.0)
 		shoot_timer -= delta
 		if shoot_timer < 0.0:
@@ -173,7 +221,8 @@ func _step_enemy_simulation(delta: float) -> void:
 		if target:
 			dir = enemy["position"].direction_to(target["position"])
 		var knockback: Vector2 = enemy.get("knockback", Vector2.ZERO)
-		enemy["position"] += dir * ENEMY_MOVE_SPEED * delta + knockback * delta
+		var enemy_speed: float = enemy.get("move_speed", ENEMY_MOVE_SPEED)
+		enemy["position"] += dir * enemy_speed * delta + knockback * delta
 		knockback = knockback.lerp(Vector2.ZERO, ENEMY_KNOCKBACK_DECAY * delta)
 		if knockback.length_squared() < 4.0:
 			knockback = Vector2.ZERO
@@ -183,10 +232,11 @@ func _step_enemy_simulation(delta: float) -> void:
 
 		enemy["damage_timer"] -= delta
 		if enemy["damage_timer"] <= 0.0:
+			var contact_damage: int = enemy.get("contact_damage", ENEMY_CONTACT_DAMAGE)
 			for peer_id: int in _players.keys():
 				var ps: Dictionary = _players[peer_id]
 				if enemy["position"].distance_to(ps["position"]) < CONTACT_RADIUS:
-					ps["health"] -= ENEMY_CONTACT_DAMAGE
+					ps["health"] -= contact_damage
 					if ps["health"] < 0:
 						ps["health"] = 0
 					_players[peer_id] = ps
@@ -213,6 +263,7 @@ func _step_projectile_simulation(delta: float) -> void:
 					enemy["knockback"] = proj["direction"] * KNOCKBACK_FORCE
 					if enemy["hp"] <= 0:
 						enemy["dead"] = true
+						_wave_slots_remaining -= 1
 					should_remove = true
 					break
 
@@ -222,11 +273,9 @@ func _step_projectile_simulation(delta: float) -> void:
 		else:
 			i += 1
 
-	var enemy_indices_to_remove: Array[int] = []
 	var j: int = 0
 	while j < _enemies.size():
 		if _enemies[j].get("dead", false):
-			enemy_indices_to_remove.append(j)
 			_enemies.remove_at(j)
 		else:
 			j += 1
@@ -235,6 +284,7 @@ func _step_projectile_simulation(delta: float) -> void:
 func _broadcast_snapshot() -> void:
 	var payload: Dictionary = {
 		"server_tick": _server_tick,
+		"wave": _current_wave,
 		"players": {},
 		"enemies": {},
 		"projectiles": {},
@@ -248,6 +298,7 @@ func _broadcast_snapshot() -> void:
 	for enemy: Dictionary in _enemies:
 		payload["enemies"][str(enemy["id"])] = {
 			"position": enemy["position"],
+			"type": enemy.get("type", "base"),
 		}
 	for proj: Dictionary in _projectiles:
 		payload["projectiles"][str(proj["id"])] = {
@@ -269,18 +320,34 @@ func _find_nearest_player_for(from_pos: Vector2) -> Dictionary:
 	return nearest
 
 
-func _spawn_enemy(pos: Vector2) -> int:
+func _spawn_enemy(pos: Vector2, type: String = "base") -> int:
 	var eid: int = _next_enemy_id
 	_next_enemy_id += 1
-	_enemies.append({
+	var data: Dictionary = {
 		"id": eid,
 		"position": pos,
-		"hp": ENEMY_HP,
-		"score_value": ENEMY_SCORE,
 		"knockback": Vector2.ZERO,
 		"damage_timer": 0.0,
-	})
-	push_warning("SERVER: Spawned enemy [id=%d, pos=%s]" % [eid, pos])
+		"type": type,
+	}
+	match type:
+		"fast":
+			data["hp"] = ENEMY_FAST_HP
+			data["move_speed"] = ENEMY_FAST_SPEED
+			data["contact_damage"] = ENEMY_FAST_DAMAGE
+			data["score_value"] = ENEMY_FAST_SCORE
+		"tank":
+			data["hp"] = ENEMY_TANK_HP
+			data["move_speed"] = ENEMY_TANK_SPEED
+			data["contact_damage"] = ENEMY_TANK_DAMAGE
+			data["score_value"] = ENEMY_TANK_SCORE
+		_:
+			data["hp"] = ENEMY_HP
+			data["move_speed"] = ENEMY_MOVE_SPEED
+			data["contact_damage"] = ENEMY_CONTACT_DAMAGE
+			data["score_value"] = ENEMY_SCORE
+	_enemies.append(data)
+	push_warning("SERVER: Spawned %s enemy [id=%d, pos=%s]" % [type, eid, pos])
 	return eid
 
 
@@ -293,13 +360,6 @@ func _spawn_projectile(pos: Vector2, dir: Vector2, _owner_peer: int) -> int:
 		"direction": dir,
 	})
 	return pid
-
-
-func _spawn_enemies() -> void:
-	var total: int = _enemies.size()
-	for pos: Vector2 in [Vector2(-700.0, -700.0), Vector2(700.0, 700.0)]:
-		_spawn_enemy(pos)
-	push_warning("SERVER: Spawned %d new enemies (total=%d)" % [_enemies.size() - total, _enemies.size()])
 
 
 func _notify_lobby_state() -> void:

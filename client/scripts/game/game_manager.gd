@@ -4,6 +4,7 @@ const PROJ_POOL_SIZE: int = 50
 const ENEMY_POOL_SIZE: int = 10
 const SMOOTH_RATE: float = 12.0
 const INTENT_SEND_HZ: float = 20.0
+const WAVE_DELAY: float = 3.0
 
 @onready var _player_spawn: Marker2D = %PlayerSpawn
 
@@ -20,8 +21,12 @@ var _enemy_targets: Dictionary = {}
 var _intent_timer: float = 0.0
 var _spawn_countdown: float = 5.0
 var _last_countdown_tick: int = 5
+var _current_wave: int = 0
+var _wave_enemies_alive: int = 0
 
 const _enemy_scene: PackedScene = preload("res://scenes/enemies/enemy_base.tscn")
+const _enemy_fast_scene: PackedScene = preload("res://scenes/enemies/enemy_fast.tscn")
+const _enemy_tank_scene: PackedScene = preload("res://scenes/enemies/enemy_tank.tscn")
 const _projectile_scene: PackedScene = preload("res://scenes/projectiles/projectile.tscn")
 
 
@@ -29,12 +34,41 @@ func _ready() -> void:
 	GameEvents.player_died.connect(_on_player_died)
 	GameEvents.projectile_fired.connect(_on_projectile_fired)
 	GameEvents.enemy_killed.connect(_on_enemy_killed)
+	GameEvents.countdown_finished.connect(_on_countdown_finished)
 
 	if GameData.multiplayer_session_active:
 		_populate_pools()
 		_setup_network_mode()
 	else:
 		_spawn_player()
+
+
+func _on_countdown_finished() -> void:
+	if not GameData.multiplayer_session_active:
+		_start_wave(1)
+
+
+func _get_wave_composition(wave: int) -> Array[PackedScene]:
+	if wave < 3:
+		return [_enemy_scene, _enemy_scene]
+	elif wave < 5:
+		return [_enemy_scene, _enemy_fast_scene]
+	else:
+		return [_enemy_fast_scene, _enemy_tank_scene]
+
+
+func _start_wave(wave: int) -> void:
+	_current_wave = wave
+	_wave_enemies_alive = 0
+	var scenes: Array[PackedScene] = _get_wave_composition(wave)
+	for pos: Vector2 in [%EnemySpawnTL.global_position, %EnemySpawnBR.global_position]:
+		for scene: PackedScene in scenes:
+			var enemy: Node = scene.instantiate()
+			enemy.global_position = pos
+			%EntityContainer/Enemies.add_child(enemy)
+			_wave_enemies_alive += 1
+	GameEvents.wave_started.emit(wave)
+	push_warning("CLIENT: Wave %d started (%d enemies)" % [wave, _wave_enemies_alive])
 
 
 func _populate_pools() -> void:
@@ -68,9 +102,12 @@ func _release_proj(proj: Node) -> void:
 	_projectile_pool.append(proj)
 
 
-func _acquire_enemy() -> Node:
+func _acquire_enemy(type: String = "base") -> Node:
 	if _enemy_pool.is_empty():
-		return null
+		var scene: PackedScene = _enemy_fast_scene if type == "fast" else (_enemy_tank_scene if type == "tank" else _enemy_scene)
+		var node: Node = scene.instantiate()
+		node.set_physics_process(false)
+		return node
 	var enemy: Node = _enemy_pool.pop_back()
 	enemy.show()
 	enemy.process_mode = Node.PROCESS_MODE_INHERIT
@@ -117,8 +154,6 @@ func _physics_process(delta: float) -> void:
 		if _spawn_countdown <= 0.0:
 			_spawn_countdown = 0.0
 			GameEvents.countdown_finished.emit()
-			if not GameData.multiplayer_session_active:
-				_spawn_test_enemies()
 
 	if not GameData.multiplayer_session_active or not _local_player:
 		return
@@ -175,7 +210,8 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		var ed: Dictionary = server_enemies[eid_str]
 		existing_enemy_ids.append(eid_str)
 		if not _server_enemy_nodes.has(eid_str):
-			var enemy: Node = _acquire_enemy()
+			var enemy_type: String = ed.get("type", "base")
+			var enemy: Node = _acquire_enemy(enemy_type)
 			if enemy:
 				enemy.global_position = ed.get("position", Vector2.ZERO)
 				_server_enemy_nodes[eid_str] = enemy
@@ -207,6 +243,11 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 			var proj: Node = _server_projectile_nodes[pid_str]
 			_release_proj(proj)
 			_server_projectile_nodes.erase(pid_str)
+
+	var wave: int = snapshot.get("wave", 0)
+	if wave > _current_wave:
+		_current_wave = wave
+		GameEvents.wave_started.emit(wave)
 
 
 func _spawn_remote_player(id: String, data: Dictionary) -> void:
@@ -246,15 +287,15 @@ func _compute_stats() -> Dictionary:
 	return {"time": 0.0, "accuracy": 0.0, "fired": _shots_fired, "hit": 0}
 
 
-func _spawn_test_enemies() -> void:
-	var enemy_scene: PackedScene = load("res://scenes/enemies/enemy_base.tscn")
-	for pos: Vector2 in [%EnemySpawnTL.global_position, %EnemySpawnBR.global_position]:
-		var enemy: Node = enemy_scene.instantiate()
-		enemy.global_position = pos
-		%EntityContainer/Enemies.add_child(enemy)
-
-
 func _on_enemy_killed(kill_position: Vector2, _score_value: int) -> void:
+	if GameData.multiplayer_session_active:
+		return
+	_wave_enemies_alive -= 1
+	if _wave_enemies_alive <= 0:
+		GameEvents.wave_completed.emit(_current_wave)
+		_current_wave += 1
+		await get_tree().create_timer(WAVE_DELAY).timeout
+		_start_wave(_current_wave)
 	if randf() < 0.15:
 		var pickup_scene: PackedScene = load("res://scenes/pickups/health_pickup.tscn")
 		var pickup: Area2D = pickup_scene.instantiate()

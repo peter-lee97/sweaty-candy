@@ -1,0 +1,30 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/enemy_base.gd" id="1_script"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_tank"]
+size = Vector2(36, 36)
+
+[node name="EnemyTank" type="CharacterBody2D" groups=["enemy"]]
+collision_layer = 2
+collision_mask = 17
+script = ExtResource("1_script")
+hp = 150
+move_speed = 70
+contact_damage = 20
+score_value = 200
+
+[node name="Sprite" type="ColorRect" parent="."]
+size = Vector2(40, 40)
+position = Vector2(-20, -20)
+color = Color(0.6, 0.2, 0.8, 1.0)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_tank")
+
+[node name="VisionRay" type="RayCast2D" parent="."]
+collision_mask = 16
+enabled = true
+
+[node name="VisibilityNotifier" type="VisibleOnScreenNotifier2D" parent="."]
+rect = Rect2(-20, -20, 40, 40)

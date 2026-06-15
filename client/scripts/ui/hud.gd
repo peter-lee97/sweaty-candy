@@ -6,6 +6,7 @@ extends CanvasLayer
 @onready var _win_label: Label = %WinLabel
 @onready var _stats_label: Label = %StatsLabel
 @onready var _countdown_label: Label = %CountdownLabel
+@onready var _wave_label: Label = %WaveLabel
 
 
 func _ready() -> void:
@@ -14,11 +15,13 @@ func _ready() -> void:
 	GameEvents.game_completed.connect(_on_game_completed)
 	GameEvents.countdown_tick.connect(_on_countdown_tick)
 	GameEvents.countdown_finished.connect(_on_countdown_finished)
+	GameEvents.wave_started.connect(_on_wave_started)
 	_game_over_label.hide()
 	_restart_label.hide()
 	_win_label.hide()
 	_stats_label.hide()
 	_countdown_label.hide()
+	_wave_label.hide()
 
 
 func _process(_delta: float) -> void:
@@ -64,3 +67,10 @@ func _on_countdown_tick(seconds_left: int) -> void:
 func _on_countdown_finished() -> void:
 	await get_tree().create_timer(0.8).timeout
 	_countdown_label.hide()
+
+
+func _on_wave_started(wave: int) -> void:
+	_wave_label.text = "Wave %d" % wave
+	_wave_label.show()
+	await get_tree().create_timer(2.0).timeout
+	_wave_label.hide()

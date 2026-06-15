@@ -1,0 +1,30 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemies/enemy_base.gd" id="1_script"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_fast"]
+size = Vector2(20, 20)
+
+[node name="EnemyFast" type="CharacterBody2D" groups=["enemy"]]
+collision_layer = 2
+collision_mask = 17
+script = ExtResource("1_script")
+hp = 25
+move_speed = 250
+contact_damage = 8
+score_value = 150
+
+[node name="Sprite" type="ColorRect" parent="."]
+size = Vector2(24, 24)
+position = Vector2(-12, -12)
+color = Color(1.0, 0.5, 0.1, 1.0)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_fast")
+
+[node name="VisionRay" type="RayCast2D" parent="."]
+collision_mask = 16
+enabled = true
+
+[node name="VisibilityNotifier" type="VisibleOnScreenNotifier2D" parent="."]
+rect = Rect2(-12, -12, 24, 24)
