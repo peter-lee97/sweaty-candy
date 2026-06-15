@@ -259,6 +259,7 @@ func _spawn_enemy(pos: Vector2) -> int:
 		"score_value": ENEMY_SCORE,
 		"knockback": Vector2.ZERO,
 	})
+	push_warning("SERVER: Spawned enemy [id=%d, pos=%s]" % [eid, pos])
 	return eid
 
 
@@ -274,8 +275,10 @@ func _spawn_projectile(pos: Vector2, dir: Vector2, _owner_peer: int) -> int:
 
 
 func _spawn_enemies() -> void:
+	var total: int = _enemies.size()
 	for pos: Vector2 in [Vector2(-700.0, -700.0), Vector2(700.0, 700.0)]:
 		_spawn_enemy(pos)
+	push_warning("SERVER: Spawned %d new enemies (total=%d)" % [_enemies.size() - total, _enemies.size()])
 
 
 func _notify_lobby_state() -> void:
