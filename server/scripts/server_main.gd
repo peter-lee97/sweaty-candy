@@ -235,14 +235,19 @@ func _step_projectile_simulation(delta: float) -> void:
 func _broadcast_snapshot() -> void:
 	var payload: Dictionary = {
 		"server_tick": _server_tick,
-		"players": _players,
+		"players": {},
 		"enemies": {},
 		"projectiles": {},
 	}
+	for peer_id: int in _players.keys():
+		var ps: Dictionary = _players[peer_id]
+		payload["players"][peer_id] = {
+			"position": ps["position"],
+			"health": ps["health"],
+		}
 	for enemy: Dictionary in _enemies:
 		payload["enemies"][str(enemy["id"])] = {
 			"position": enemy["position"],
-			"hp": enemy["hp"],
 		}
 	for proj: Dictionary in _projectiles:
 		payload["projectiles"][str(proj["id"])] = {
@@ -300,8 +305,14 @@ func _spawn_enemies() -> void:
 func _notify_lobby_state() -> void:
 	var payload: Dictionary = {
 		"server_tick": _server_tick,
-		"players": _players,
+		"players": {},
 	}
+	for peer_id: int in _players.keys():
+		var ps: Dictionary = _players[peer_id]
+		payload["players"][peer_id] = {
+			"position": ps["position"],
+			"health": ps["health"],
+		}
 	rpc("receive_lobby_state", payload)
 
 
