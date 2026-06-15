@@ -26,6 +26,7 @@ offset_left = -200.0
 offset_top = -150.0
 offset_right = 200.0
 offset_bottom = 150.0
+theme_override_constants/separation = 14
 
 [node name="Title" type="Label" parent="VBoxContainer"]
 text = "Waiting Room"
@@ -37,7 +38,7 @@ theme_override_colors/font_color = Color(0.9, 0.4, 0.2, 1.0)
 unique_name_in_owner = true
 text = "..."
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 20
 theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1.0)
 
 [node name="RoomIdLabel" type="Label" parent="VBoxContainer"]
@@ -51,32 +52,35 @@ theme_override_colors/font_color = Color(0.5, 0.5, 0.6, 1.0)
 unique_name_in_owner = true
 text = ""
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 18
 
 [node name="StateLabel" type="Label" parent="VBoxContainer"]
 unique_name_in_owner = true
 text = ""
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 18
 
 [node name="Spacer" type="Control" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 20)
+custom_minimum_size = Vector2(0, 30)
 
 [node name="ButtonsRow" type="HBoxContainer" parent="VBoxContainer"]
+theme_override_constants/separation = 16
 
 [node name="StartButton" type="Button" parent="VBoxContainer/ButtonsRow"]
 unique_name_in_owner = true
 text = "Start Game"
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 22
 visible = false
 
 [node name="LeaveButton" type="Button" parent="VBoxContainer/ButtonsRow"]
 text = "Leave"
+theme_override_font_sizes/font_size = 22
 
 [node name="StatusLabel" type="Label" parent="VBoxContainer"]
 unique_name_in_owner = true
 text = ""
 horizontal_alignment = 1
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1.0)
 
 [connection signal="pressed" from="VBoxContainer/ButtonsRow/StartButton" to="." method="_on_start_pressed"]

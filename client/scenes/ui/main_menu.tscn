@@ -26,6 +26,7 @@ offset_left = -150.0
 offset_top = -120.0
 offset_right = 150.0
 offset_bottom = 120.0
+theme_override_constants/separation = 16
 
 [node name="Title" type="Label" parent="VBoxContainer"]
 text = "SWEATY CANDY"
@@ -36,22 +37,22 @@ theme_override_colors/font_color = Color(0.9, 0.4, 0.2, 1.0)
 [node name="Subtitle" type="Label" parent="VBoxContainer"]
 text = "A top-down horde shooter"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 18
 theme_override_colors/font_color = Color(0.5, 0.5, 0.6, 1.0)
 
 [node name="Spacer" type="Control" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 30)
+custom_minimum_size = Vector2(0, 40)
 
 [node name="SingleplayerButton" type="Button" parent="VBoxContainer"]
 text = "SINGLE PLAYER"
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 26
 
 [node name="Spacer2" type="Control" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 8)
+custom_minimum_size = Vector2(0, 16)
 
 [node name="MultiplayerButton" type="Button" parent="VBoxContainer"]
 text = "MULTIPLAYER"
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 26
 
 [node name="StatusLabel" type="Label" parent="."]
 unique_name_in_owner = true
