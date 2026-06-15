@@ -32,7 +32,7 @@ func _process(_delta: float) -> void:
 	if not (_game_over_label.visible or _win_label.visible):
 		return
 
-	var mouse_pos: Vector2 = get_global_mouse_position()
+	var mouse_pos: Vector2 = get_viewport().get_mouse_position()
 	if _restart_label.get_global_rect().has_point(mouse_pos):
 		if GameData.multiplayer_session_active:
 			GameData.clear_multiplayer_session()
