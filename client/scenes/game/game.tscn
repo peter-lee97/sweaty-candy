@@ -198,6 +198,23 @@ text = "Click to restart"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="MenuLabel" type="Label" parent="HUD"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = 30.0
+offset_right = 150.0
+offset_bottom = 55.0
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 16
+text = "Back to Menu"
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="Obstacle1" type="StaticBody2D" parent="." groups=["obstacle"]]
 collision_layer = 16
 collision_mask = 0

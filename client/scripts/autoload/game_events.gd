@@ -3,6 +3,7 @@ extends Node
 signal player_health_changed(current_health: int, max_health: int)
 signal player_died
 signal projectile_fired
+signal projectile_hit
 signal enemy_killed(kill_position: Vector2, score_value: int)
 signal countdown_tick(seconds_left: int)
 signal countdown_finished

@@ -9,6 +9,7 @@ const WAVE_DELAY: float = 3.0
 @onready var _player_spawn: Marker2D = %PlayerSpawn
 
 var _shots_fired: int = 0
+var _shots_hit: int = 0
 var _local_player: CharacterBody2D
 var _network_tick: int = 0
 var _remote_player_nodes: Dictionary = {}
@@ -33,6 +34,7 @@ const _projectile_scene: PackedScene = preload("res://scenes/projectiles/project
 func _ready() -> void:
 	GameEvents.player_died.connect(_on_player_died)
 	GameEvents.projectile_fired.connect(_on_projectile_fired)
+	GameEvents.projectile_hit.connect(_on_projectile_hit)
 	GameEvents.enemy_killed.connect(_on_enemy_killed)
 	GameEvents.countdown_finished.connect(_on_countdown_finished)
 
@@ -283,8 +285,12 @@ func _on_projectile_fired() -> void:
 	_shots_fired += 1
 
 
+func _on_projectile_hit() -> void:
+	_shots_hit += 1
+
+
 func _compute_stats() -> Dictionary:
-	return {"time": 0.0, "accuracy": 0.0, "fired": _shots_fired, "hit": 0}
+	return {"time": 0.0, "accuracy": 0.0, "fired": _shots_fired, "hit": _shots_hit}
 
 
 func _on_enemy_killed(kill_position: Vector2, _score_value: int) -> void:

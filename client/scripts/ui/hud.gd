@@ -7,6 +7,7 @@ extends CanvasLayer
 @onready var _stats_label: Label = %StatsLabel
 @onready var _countdown_label: Label = %CountdownLabel
 @onready var _wave_label: Label = %WaveLabel
+@onready var _menu_label: Label = %MenuLabel
 
 
 func _ready() -> void:
@@ -22,15 +23,26 @@ func _ready() -> void:
 	_stats_label.hide()
 	_countdown_label.hide()
 	_wave_label.hide()
+	_menu_label.hide()
 
 
 func _process(_delta: float) -> void:
-	if Input.is_action_just_pressed("shoot") and (_game_over_label.visible or _win_label.visible):
+	if not Input.is_action_just_pressed("shoot"):
+		return
+	if not (_game_over_label.visible or _win_label.visible):
+		return
+
+	var mouse_pos: Vector2 = get_global_mouse_position()
+	if _restart_label.get_global_rect().has_point(mouse_pos):
 		if GameData.multiplayer_session_active:
 			GameData.clear_multiplayer_session()
 			get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")
 		else:
 			get_tree().reload_current_scene()
+	elif _menu_label.get_global_rect().has_point(mouse_pos):
+		if GameData.multiplayer_session_active:
+			GameData.clear_multiplayer_session()
+		get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 
 func _on_player_health_changed(current: int, max_hp: int) -> void:
@@ -53,6 +65,7 @@ func _on_game_completed(won: bool, time_sec: float, _accuracy: float, shots_fire
 	if won:
 		_win_label.show()
 	_restart_label.show()
+	_menu_label.show()
 
 
 func _on_countdown_tick(seconds_left: int) -> void:

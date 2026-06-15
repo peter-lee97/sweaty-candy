@@ -21,4 +21,5 @@ func _physics_process(delta: float) -> void:
 			queue_free()
 		elif body.is_in_group("enemy") and body.has_method("take_damage"):
 			body.take_damage(damage, global_position.direction_to(body.global_position))
+			GameEvents.projectile_hit.emit()
 			queue_free()
