@@ -150,6 +150,12 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 					_local_player.global_position = server_pos
 				elif error > 4.0:
 					_local_player.global_position = _local_player.global_position.lerp(server_pos, 0.3)
+				var server_health: int = pd.get("health", _local_player.health)
+				if server_health < _local_player.health:
+					_local_player.health = server_health
+					GameEvents.player_health_changed.emit(_local_player.health, _local_player.max_health)
+				if _local_player.health <= 0:
+					_local_player._die()
 			continue
 		if not _remote_player_nodes.has(str(id)):
 			_spawn_remote_player(str(id), pd)

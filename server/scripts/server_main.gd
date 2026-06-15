@@ -11,6 +11,9 @@ const ENEMY_COUNT: int = 5
 const KNOCKBACK_FORCE: float = 400.0
 const ENEMY_KNOCKBACK_DECAY: float = 8.0
 const PLAYER_HALF_EXTENT: float = 14.0
+const ENEMY_CONTACT_DAMAGE: int = 10
+const ENEMY_HIT_RATE: float = 0.5
+const CONTACT_RADIUS: float = 28.0
 
 @export var listen_port: int = 7777
 @export var max_players: int = 4
@@ -178,6 +181,18 @@ func _step_enemy_simulation(delta: float) -> void:
 		enemy["position"].x = clamp(enemy["position"].x, -arena_half_size, arena_half_size)
 		enemy["position"].y = clamp(enemy["position"].y, -arena_half_size, arena_half_size)
 
+		enemy["damage_timer"] -= delta
+		if enemy["damage_timer"] <= 0.0:
+			for peer_id: int in _players.keys():
+				var ps: Dictionary = _players[peer_id]
+				if enemy["position"].distance_to(ps["position"]) < CONTACT_RADIUS:
+					ps["health"] -= ENEMY_CONTACT_DAMAGE
+					if ps["health"] < 0:
+						ps["health"] = 0
+					_players[peer_id] = ps
+					enemy["damage_timer"] = ENEMY_HIT_RATE
+					break
+
 
 func _step_projectile_simulation(delta: float) -> void:
 	var proj_indices_to_remove: Array[int] = []
@@ -258,6 +273,7 @@ func _spawn_enemy(pos: Vector2) -> int:
 		"hp": ENEMY_HP,
 		"score_value": ENEMY_SCORE,
 		"knockback": Vector2.ZERO,
+		"damage_timer": 0.0,
 	})
 	push_warning("SERVER: Spawned enemy [id=%d, pos=%s]" % [eid, pos])
 	return eid

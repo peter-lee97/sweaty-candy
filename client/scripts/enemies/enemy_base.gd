@@ -4,9 +4,12 @@ extends CharacterBody2D
 @export var move_speed: float = 125.0
 @export var score_value: int = 100
 @export var detection_range: float = 600.0
+@export var hit_rate: float = 0.5
+@export var contact_damage: int = 10
 const MIN_CHASE_DISTANCE: float = 32.0
 
 var _knockback: Vector2 = Vector2.ZERO
+var _damage_timer: float = 0.0
 
 @onready var _vision_ray: RayCast2D = $VisionRay
 @onready var _visibility_notifier: VisibleOnScreenNotifier2D = $VisibilityNotifier
@@ -30,6 +33,15 @@ func _physics_process(delta: float) -> void:
 	if _knockback.length() < 2.0:
 		_knockback = Vector2.ZERO
 	move_and_slide()
+
+	_damage_timer -= delta
+	if _damage_timer <= 0.0:
+		for i in get_slide_collision_count():
+			var body: Node2D = get_slide_collision(i).get_collider()
+			if body.is_in_group("player") and body.has_method("take_damage"):
+				body.take_damage(contact_damage)
+				_damage_timer = hit_rate
+				break
 
 
 func _on_screen_exited() -> void:
