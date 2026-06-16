@@ -138,8 +138,6 @@ func _on_connected_to_server() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if _is_respawning:
-		return
 	if GameData.multiplayer_session_active:
 		for node_id in _remote_targets:
 			var node: CharacterBody2D = _remote_player_nodes.get(node_id)

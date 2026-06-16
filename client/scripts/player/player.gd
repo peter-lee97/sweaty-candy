@@ -11,6 +11,8 @@ var _aim_direction: Vector2 = Vector2.DOWN
 
 
 func _physics_process(delta: float) -> void:
+	if not visible:
+		return
 	var input_dir: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	velocity = input_dir * move_speed
 	move_and_slide()
