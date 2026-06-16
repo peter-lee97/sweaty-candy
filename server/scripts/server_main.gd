@@ -321,6 +321,7 @@ func _broadcast_snapshot() -> void:
 		payload["players"][peer_id] = {
 			"position": ps["position"],
 			"health": ps["health"],
+			"respawn_timer": ps.get("respawn_timer", 0.0),
 		}
 	for enemy: Dictionary in _enemies:
 		payload["enemies"][str(enemy["id"])] = {
@@ -390,6 +391,8 @@ func _spawn_projectile(pos: Vector2, dir: Vector2, _owner_peer: int) -> int:
 
 
 func _notify_lobby_state() -> void:
+	if _players.is_empty():
+		return
 	var payload: Dictionary = {
 		"server_tick": _server_tick,
 		"players": {},

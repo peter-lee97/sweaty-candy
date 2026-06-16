@@ -162,6 +162,8 @@ func _physics_process(delta: float) -> void:
 
 	if not GameData.multiplayer_session_active or not _local_player:
 		return
+	if _is_respawning:
+		return
 	if not NetworkClient.has_connection():
 		return
 	_network_tick += 1
