@@ -8,6 +8,7 @@ extends CanvasLayer
 @onready var _countdown_label: Label = %CountdownLabel
 @onready var _wave_label: Label = %WaveLabel
 @onready var _menu_label: Label = %MenuLabel
+@onready var _respawn_label: Label = %RespawnLabel
 
 
 func _ready() -> void:
@@ -17,6 +18,8 @@ func _ready() -> void:
 	GameEvents.countdown_tick.connect(_on_countdown_tick)
 	GameEvents.countdown_finished.connect(_on_countdown_finished)
 	GameEvents.wave_started.connect(_on_wave_started)
+	GameEvents.respawn_tick.connect(_on_respawn_tick)
+	GameEvents.respawn_complete.connect(_on_respawn_complete)
 	_game_over_label.hide()
 	_restart_label.hide()
 	_win_label.hide()
@@ -24,6 +27,7 @@ func _ready() -> void:
 	_countdown_label.hide()
 	_wave_label.hide()
 	_menu_label.hide()
+	_respawn_label.hide()
 
 
 func _process(_delta: float) -> void:
@@ -87,3 +91,12 @@ func _on_wave_started(wave: int) -> void:
 	_wave_label.show()
 	await get_tree().create_timer(2.0).timeout
 	_wave_label.hide()
+
+
+func _on_respawn_tick(time_left: float) -> void:
+	_respawn_label.text = "Respawning in %.1fs" % time_left
+	_respawn_label.show()
+
+
+func _on_respawn_complete() -> void:
+	_respawn_label.hide()

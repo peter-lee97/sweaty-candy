@@ -25,6 +25,8 @@ var _last_countdown_tick: int = 5
 var _current_wave: int = 0
 var _wave_enemies_alive: int = 0
 
+var _is_respawning: bool = false
+
 const _enemy_scene: PackedScene = preload("res://scenes/enemies/enemy_base.tscn")
 const _enemy_fast_scene: PackedScene = preload("res://scenes/enemies/enemy_fast.tscn")
 const _enemy_tank_scene: PackedScene = preload("res://scenes/enemies/enemy_tank.tscn")
@@ -52,11 +54,11 @@ func _on_countdown_finished() -> void:
 
 func _get_wave_composition(wave: int) -> Array[PackedScene]:
 	if wave < 3:
-		return [_enemy_scene, _enemy_scene]
+		return [_enemy_scene, _enemy_scene, _enemy_scene]
 	elif wave < 5:
-		return [_enemy_scene, _enemy_fast_scene]
+		return [_enemy_scene, _enemy_scene, _enemy_fast_scene]
 	else:
-		return [_enemy_fast_scene, _enemy_tank_scene]
+		return [_enemy_scene, _enemy_fast_scene, _enemy_tank_scene]
 
 
 func _start_wave(wave: int) -> void:
@@ -136,6 +138,8 @@ func _on_connected_to_server() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _is_respawning:
+		return
 	if GameData.multiplayer_session_active:
 		for node_id in _remote_targets:
 			var node: CharacterBody2D = _remote_player_nodes.get(node_id)
@@ -194,11 +198,29 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 				elif error > 4.0:
 					_local_player.global_position = _local_player.global_position.lerp(server_pos, 0.3)
 				var server_health: int = pd.get("health", _local_player.health)
-				if server_health < _local_player.health:
+				if server_health < _local_player.health and not _is_respawning:
 					_local_player.health = server_health
 					GameEvents.player_health_changed.emit(_local_player.health, _local_player.max_health)
-				if _local_player.health <= 0:
-					_local_player._die()
+				var respawn_timer: float = pd.get("respawn_timer", 0.0)
+				if respawn_timer > 0.0:
+					_is_respawning = true
+					_local_player.hide()
+					GameEvents.respawn_tick.emit(respawn_timer)
+				elif _is_respawning and server_health > 0:
+					_is_respawning = false
+					_local_player.show()
+					_local_player.health = server_health
+					_local_player.global_position = pd.get("position", Vector2.ZERO)
+					GameEvents.player_health_changed.emit(_local_player.health, _local_player.max_health)
+					GameEvents.respawn_complete.emit()
+				elif not _is_respawning and server_health <= 0:
+					var has_survivors: bool = false
+					for pid in players:
+						if players[pid].get("health", 0) > 0:
+							has_survivors = true
+							break
+					if not has_survivors:
+						_local_player._die()
 			continue
 		if not _remote_player_nodes.has(str(id)):
 			_spawn_remote_player(str(id), pd)

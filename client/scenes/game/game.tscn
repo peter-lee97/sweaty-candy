@@ -147,6 +147,21 @@ horizontal_alignment = 1
 
 [node name="ExitButton" parent="HUD" unique_id=1621529152 instance=ExtResource("9_exit")]
 
+[node name="RespawnLabel" type="Label" parent="HUD"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = 50.0
+offset_right = 200.0
+offset_bottom = 90.0
+theme_override_colors/font_color = Color(1.0, 0.3, 0.3, 0.6)
+theme_override_font_sizes/font_size = 30
+horizontal_alignment = 1
+
 [node name="GameOverLabel" type="Label" parent="HUD" unique_id=1458967569]
 unique_name_in_owner = true
 anchors_preset = 8

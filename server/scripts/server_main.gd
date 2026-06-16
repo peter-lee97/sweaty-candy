@@ -82,11 +82,11 @@ func _start_wave(wave: int) -> void:
 
 func _get_wave_types(wave: int) -> Array[String]:
 	if wave < 3:
-		return ["base", "base"]
+		return ["base", "base", "base"]
 	elif wave < 5:
-		return ["base", "fast"]
+		return ["base", "base", "fast"]
 	else:
-		return ["fast", "tank"]
+		return ["base", "fast", "tank"]
 
 
 func _physics_process(delta: float) -> void:
@@ -95,6 +95,7 @@ func _physics_process(delta: float) -> void:
 	_server_tick += 1
 	_step_player_simulation(delta)
 	_step_enemy_simulation(delta)
+	_step_respawn_timers(delta)
 	_step_projectile_simulation(delta)
 	_snapshot_timer += delta
 	if _snapshot_timer >= (1.0 / snapshot_rate_hz):
@@ -230,18 +231,26 @@ func _step_enemy_simulation(delta: float) -> void:
 		enemy["position"].x = clamp(enemy["position"].x, -arena_half_size, arena_half_size)
 		enemy["position"].y = clamp(enemy["position"].y, -arena_half_size, arena_half_size)
 
-		enemy["damage_timer"] -= delta
-		if enemy["damage_timer"] <= 0.0:
-			var contact_damage: int = enemy.get("contact_damage", ENEMY_CONTACT_DAMAGE)
-			for peer_id: int in _players.keys():
-				var ps: Dictionary = _players[peer_id]
-				if enemy["position"].distance_to(ps["position"]) < CONTACT_RADIUS:
-					ps["health"] -= contact_damage
-					if ps["health"] < 0:
-						ps["health"] = 0
-					_players[peer_id] = ps
-					enemy["damage_timer"] = ENEMY_HIT_RATE
-					break
+		if not enemy.get("dead", false):
+			enemy["damage_timer"] -= delta
+			if enemy["damage_timer"] <= 0.0:
+				var contact_damage: int = enemy.get("contact_damage", ENEMY_CONTACT_DAMAGE)
+				for peer_id: int in _players.keys():
+					var ps: Dictionary = _players[peer_id]
+					if enemy["position"].distance_to(ps["position"]) < CONTACT_RADIUS:
+						ps["health"] -= contact_damage
+						if ps["health"] < 0:
+							ps["health"] = 0
+						_players[peer_id] = ps
+						enemy["damage_timer"] = ENEMY_HIT_RATE
+						break
+
+	for peer_id: int in _players.keys():
+		var ps: Dictionary = _players[peer_id]
+		if ps["health"] <= 0 and ps.get("alive", true):
+			ps["alive"] = false
+			ps["respawn_timer"] = _get_respawn_time()
+			_players[peer_id] = ps
 
 
 func _step_projectile_simulation(delta: float) -> void:
@@ -279,6 +288,24 @@ func _step_projectile_simulation(delta: float) -> void:
 			_enemies.remove_at(j)
 		else:
 			j += 1
+
+
+func _get_respawn_time() -> float:
+	return clamp(5.0 + (_current_wave - 1) * 0.5, 5.0, 10.0)
+
+
+func _step_respawn_timers(delta: float) -> void:
+	for peer_id: int in _players.keys():
+		var state: Dictionary = _players[peer_id]
+		if state.get("alive", true):
+			continue
+		state["respawn_timer"] -= delta
+		if state["respawn_timer"] <= 0.0:
+			state["health"] = 100
+			state["position"] = _spawn_position_for_peer(peer_id)
+			state["alive"] = true
+			state["respawn_timer"] = 0.0
+		_players[peer_id] = state
 
 
 func _broadcast_snapshot() -> void:
@@ -372,6 +399,7 @@ func _notify_lobby_state() -> void:
 		payload["players"][peer_id] = {
 			"position": ps["position"],
 			"health": ps["health"],
+			"respawn_timer": ps.get("respawn_timer", 0.0),
 		}
 	rpc("receive_lobby_state", payload)
 
@@ -395,6 +423,8 @@ func _new_player_state(spawn_position: Vector2) -> Dictionary:
 		"weapon_index": 0,
 		"last_input_tick": 0,
 		"wants_shoot": false,
+		"alive": true,
+		"respawn_timer": 0.0,
 	}
 
 
