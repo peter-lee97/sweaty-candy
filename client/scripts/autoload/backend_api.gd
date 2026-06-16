@@ -105,11 +105,15 @@ func _request(method: String, path: String, body: Dictionary = {}) -> Dictionary
 	var http_method: int = HTTPClient.METHOD_POST
 	if method == "GET":
 		http_method = HTTPClient.METHOD_GET
+	http.timeout = 5.0
 	var err: int = http.request(url, PackedStringArray(headers), http_method, body_str)
 	if err != OK:
 		http.queue_free()
 		return {"ok": false, "error": "request failed: %d" % err}
 	var result: Array = await http.request_completed
+	if result[0] == HTTPRequest.RESULT_TIMEOUT:
+		http.queue_free()
+		return {"ok": false, "error": "Request timed out"}
 	var code: int = result[1]
 	var response_body: String = result[3].get_string_from_utf8()
 	http.queue_free()

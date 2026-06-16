@@ -7,6 +7,8 @@ extends Control
 @onready var _status_label: Label = %StatusLabel
 @onready var _start_button: Button = %StartButton
 
+var _is_entering: bool = false
+
 
 func _ready() -> void:
 	BackendApi.lobby_events_updated.connect(_on_lobby_events)
@@ -41,9 +43,16 @@ func _update_display(lobby: Dictionary) -> void:
 
 
 func _enter_game(lobby: Dictionary) -> void:
+	if _is_entering:
+		return
 	var host: String = str(lobby.get("serverHost", ""))
 	var port: int = int(lobby.get("serverPort", 0))
+	if host == "" or port == 0:
+		_status_label.text = "No game server available"
+		return
+	_is_entering = true
 	GameData.multiplayer_server_url = "ws://" + host + ":" + str(port)
+	BackendApi.disconnect_lobby_events()
 	get_tree().change_scene_to_file("res://scenes/game/game.tscn")
 
 
@@ -74,6 +83,7 @@ func _on_leave_pressed() -> void:
 
 func _on_room_gone() -> void:
 	_status_label.text = "Room no longer exists"
+	BackendApi.disconnect_lobby_events()
 	GameData.clear_multiplayer_session()
 	await get_tree().create_timer(2.0).timeout
 	get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")

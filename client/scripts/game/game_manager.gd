@@ -105,8 +105,8 @@ func _release_proj(proj: Node) -> void:
 
 
 func _acquire_enemy(type: String = "base") -> Node:
-	if _enemy_pool.is_empty():
-		var scene: PackedScene = _enemy_fast_scene if type == "fast" else (_enemy_tank_scene if type == "tank" else _enemy_scene)
+	var scene: PackedScene = _enemy_fast_scene if type == "fast" else (_enemy_tank_scene if type == "tank" else _enemy_scene)
+	if type != "base" or _enemy_pool.is_empty():
 		var node: Node = scene.instantiate()
 		node.set_physics_process(false)
 		return node
@@ -127,6 +127,7 @@ func _setup_network_mode() -> void:
 	NetworkClient.snapshot_received.connect(_apply_snapshot)
 	NetworkClient.connected_to_server.connect(_on_connected_to_server)
 	NetworkClient.disconnected_from_server.connect(_on_disconnected_from_server)
+	NetworkClient.connection_failed.connect(_on_connection_failed)
 	NetworkClient.connect_to_server(GameData.multiplayer_server_url)
 
 
@@ -166,11 +167,16 @@ func _physics_process(delta: float) -> void:
 	var move_dir: Vector2 = _local_player.velocity.normalized() if _local_player.velocity.length_squared() > 0.01 else Vector2.ZERO
 	var aim_dir: Vector2 = _local_player._aim_direction
 	var wants_shoot: bool = Input.is_action_pressed("shoot") and not GameEvents.ui_blocking_input
+	var weapon_cycle: int = 0
+	if Input.is_action_just_pressed("cycle_next"):
+		weapon_cycle = 1
+	elif Input.is_action_just_pressed("cycle_prev"):
+		weapon_cycle = -1
 
 	_intent_timer += delta
 	if _intent_timer >= 1.0 / INTENT_SEND_HZ:
 		_intent_timer -= 1.0 / INTENT_SEND_HZ
-		NetworkClient.send_player_intent(_network_tick, move_dir, aim_dir, wants_shoot, 0)
+		NetworkClient.send_player_intent(_network_tick, move_dir, aim_dir, wants_shoot, weapon_cycle)
 
 
 func _apply_snapshot(snapshot: Dictionary) -> void:
@@ -278,6 +284,10 @@ func _spawn_player() -> void:
 
 
 func _on_disconnected_from_server() -> void:
+	GameEvents.game_completed.emit(false, 0.0, 0.0, 0, 0)
+
+
+func _on_connection_failed(_reason: String) -> void:
 	GameEvents.game_completed.emit(false, 0.0, 0.0, 0, 0)
 
 
