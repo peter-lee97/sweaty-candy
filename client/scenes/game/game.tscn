@@ -23,12 +23,19 @@ size = Vector2(800, 40)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_obstacle_23"]
 size = Vector2(600, 40)
 
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_spawn_h"]
+size = Vector2(2640, 200)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_spawn_v"]
+size = Vector2(200, 2640)
+
 [node name="Game" type="Node2D" unique_id=2145505912]
 script = ExtResource("1_script")
 
 [node name="TileMapLayer" type="TileMapLayer" parent="." unique_id=1723739002]
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=1374788432]
+unique_name_in_owner = true
 position_smoothing_enabled = true
 script = ExtResource("5_camera_script")
 
@@ -77,6 +84,25 @@ unique_name_in_owner = true
 position = Vector2(600, 200)
 unique_name_in_owner = true
 
+[node name="EnemySpawnZone" type="Area2D" parent="."]
+unique_name_in_owner = true
+
+[node name="EdgeTop" type="CollisionShape2D" parent="EnemySpawnZone"]
+position = Vector2(0, -1220)
+shape = SubResource("RectangleShape2D_spawn_h")
+
+[node name="EdgeRight" type="CollisionShape2D" parent="EnemySpawnZone"]
+position = Vector2(1220, 0)
+shape = SubResource("RectangleShape2D_spawn_v")
+
+[node name="EdgeBottom" type="CollisionShape2D" parent="EnemySpawnZone"]
+position = Vector2(0, 1220)
+shape = SubResource("RectangleShape2D_spawn_h")
+
+[node name="EdgeLeft" type="CollisionShape2D" parent="EnemySpawnZone"]
+position = Vector2(-1220, 0)
+shape = SubResource("RectangleShape2D_spawn_v")
+
 [node name="EntityContainer" type="Node2D" parent="." unique_id=1984937077]
 unique_name_in_owner = true
 
@@ -85,6 +111,8 @@ unique_name_in_owner = true
 [node name="Enemies" type="Node2D" parent="EntityContainer"]
 
 [node name="Pickups" type="Node2D" parent="EntityContainer"]
+
+[node name="Projectiles" type="Node2D" parent="EntityContainer"]
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1125374998]
 script = ExtResource("4_hud_script")

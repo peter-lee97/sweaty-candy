@@ -16,4 +16,5 @@ func clear_multiplayer_session() -> void:
 	multiplayer_owner_user_id = ""
 	multiplayer_server_url = ""
 	multiplayer_session_active = false
+	GameEvents.ui_blocking_input = false
 

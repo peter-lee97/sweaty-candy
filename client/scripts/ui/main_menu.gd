@@ -4,6 +4,8 @@ extends Control
 
 
 func _on_singleplayer_pressed() -> void:
+	GameData.clear_multiplayer_session()
+	GameEvents.ui_blocking_input = false
 	get_tree().change_scene_to_file("res://scenes/game/game.tscn")
 
 

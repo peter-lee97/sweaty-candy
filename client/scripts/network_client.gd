@@ -22,11 +22,24 @@ func connect_to_server(url: String) -> void:
 	multiplayer.multiplayer_peer = _peer
 
 
-func disconnect_from_server() -> void:
-	if _peer and _connected:
-		_peer.close()
-	multiplayer.multiplayer_peer = null
+func stop_processing() -> void:
 	_connected = false
+	multiplayer.multiplayer_peer = null
+
+
+func disconnect_from_server() -> void:
+	_connected = false
+	multiplayer.multiplayer_peer = null
+	if _peer:
+		if _peer.peer_connected.is_connected(_on_peer_connected):
+			_peer.peer_connected.disconnect(_on_peer_connected)
+		if _peer.peer_disconnected.is_connected(_on_peer_disconnected):
+			_peer.peer_disconnected.disconnect(_on_peer_disconnected)
+		if _peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+			_peer.close()
+		_peer = null
+	_server_peer_id = 1
+	_own_peer_id = 0
 
 
 func has_connection() -> bool:
@@ -34,7 +47,9 @@ func has_connection() -> bool:
 
 
 func send_player_intent(tick: int, move_dir: Vector2, aim_dir: Vector2, wants_shoot: bool, weapon_cycle: int) -> void:
-	if not _connected:
+	if not _connected or not _peer:
+		return
+	if _peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
 		return
 	rpc_id(_server_peer_id, "submit_player_intent", tick, move_dir, aim_dir, wants_shoot, weapon_cycle)
 

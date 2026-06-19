@@ -13,6 +13,7 @@ const ENEMY_KNOCKBACK_DECAY: float = 8.0
 const PLAYER_HALF_EXTENT: float = 14.0
 const ENEMY_HIT_RATE: float = 0.5
 const CONTACT_RADIUS: float = 28.0
+const CONTACT_RADIUS_SQUARED: float = CONTACT_RADIUS * CONTACT_RADIUS
 const ENEMY_FAST_HP: int = 25
 const ENEMY_FAST_SPEED: float = 250.0
 const ENEMY_FAST_DAMAGE: int = 8
@@ -22,6 +23,10 @@ const ENEMY_TANK_SPEED: float = 70.0
 const ENEMY_TANK_DAMAGE: int = 20
 const ENEMY_TANK_SCORE: int = 200
 const WAVE_DELAY: float = 3.0
+const SPAWN_STAGGER: float = 0.35
+const SPAWN_INSET: float = 80.0
+const SPAWN_BAND_WIDTH: float = 200.0
+const MAX_ENEMIES_PER_WAVE: int = 100
 
 @export var listen_port: int = 7777
 @export var max_players: int = 4
@@ -50,13 +55,15 @@ var _next_proj_id: int = 0
 var _current_wave: int = 0
 var _wave_slots_remaining: int = 0
 var _wave_delay_timer: float = 0.0
+var _is_spawning: bool = false
+var _game_over: bool = false
+var _wave_system_started: bool = false
 
 
 func _ready() -> void:
 	var started: bool = _start_server()
 	if started:
 		_register_server_in_backend()
-		_spawn_countdown_finished()
 
 
 func _spawn_countdown_finished() -> void:
@@ -66,49 +73,88 @@ func _spawn_countdown_finished() -> void:
 
 func _start_wave(wave: int) -> void:
 	_current_wave = wave
-	_wave_slots_remaining = 0
 	_wave_delay_timer = 0.0
-	var types: Array[String] = _get_wave_types(wave)
-	var spawn_positions: Array[Vector2] = [
-		Vector2(-600.0, -200.0),
-		Vector2(600.0, 200.0),
-	]
-	for pos: Vector2 in spawn_positions:
-		for t: String in types:
-			_spawn_enemy(pos, t)
-			_wave_slots_remaining += 1
-	push_warning("SERVER: Wave %d started (%d enemies)" % [wave, _wave_slots_remaining])
+	var player_count: int = maxi(_players.size(), 1)
+	var base_count: int = _get_wave_base_count(wave)
+	var multiplier: float = 1.0 + (player_count - 1) * 0.5
+	var total: int = clampi(ceili(base_count * multiplier), 1, MAX_ENEMIES_PER_WAVE)
+	_wave_slots_remaining = total
+	_is_spawning = true
+	var types: Array[String] = _get_wave_types(wave, total)
+	push_warning("SERVER: Wave %d started (%d enemies)" % [wave, total])
+	for i in total:
+		_spawn_enemy(_get_random_spawn_position(), types[i])
+		await get_tree().create_timer(SPAWN_STAGGER).timeout
+	_is_spawning = false
 
 
-func _get_wave_types(wave: int) -> Array[String]:
+func _get_wave_base_count(wave: int) -> int:
 	if wave < 3:
-		return ["base", "base", "base"]
+		return 5
 	elif wave < 5:
-		return ["base", "base", "fast"]
+		return 6
+	elif wave < 7:
+		return 8
 	else:
-		return ["base", "fast", "tank"]
+		return 8 + (wave - 7) / 2
+
+
+func _get_wave_types(wave: int, count: int) -> Array[String]:
+	var available: Array[String] = ["base"]
+	if wave >= 3:
+		available.append("fast")
+	if wave >= 5:
+		available.append("tank")
+	var result: Array[String] = []
+	for i in count:
+		result.append(available[i % available.size()])
+	return result
+
+
+func _get_random_spawn_position() -> Vector2:
+	var half: float = arena_half_size - SPAWN_INSET
+	var band: float = SPAWN_BAND_WIDTH
+	match randi() % 4:
+		0: return Vector2(randf_range(-half, half), randf_range(-half, -half + band))
+		1: return Vector2(randf_range(half - band, half), randf_range(-half, half))
+		2: return Vector2(randf_range(-half, half), randf_range(half - band, half))
+		_: return Vector2(randf_range(-half, -half + band), randf_range(-half, half))
 
 
 func _physics_process(delta: float) -> void:
 	if not multiplayer.is_server():
 		return
-	_server_tick += 1
-	_step_player_simulation(delta)
-	_step_enemy_simulation(delta)
-	_step_respawn_timers(delta)
-	_step_projectile_simulation(delta)
+
+	if not _game_over:
+		_server_tick += 1
+		_step_player_simulation(delta)
+		_step_enemy_simulation(delta)
+
+		var all_dead: bool = true
+		for ps in _players.values():
+			if ps.get("alive", false):
+				all_dead = false
+				break
+		if all_dead and not _players.is_empty():
+			_game_over = true
+			push_warning("SERVER: All players dead — game over")
+
+		if not _game_over:
+			_step_respawn_timers(delta)
+			_step_projectile_simulation(delta)
+
+			if _wave_system_started and _wave_slots_remaining <= 0 and not _is_spawning:
+				_wave_delay_timer += delta
+				if _wave_delay_timer >= WAVE_DELAY:
+					_wave_delay_timer = 0.0
+					_start_wave(_current_wave + 1)
+			else:
+				_wave_delay_timer = 0.0
+
 	_snapshot_timer += delta
 	if _snapshot_timer >= (1.0 / snapshot_rate_hz):
 		_snapshot_timer = 0.0
 		_broadcast_snapshot()
-
-	if _wave_slots_remaining <= 0:
-		_wave_delay_timer += delta
-		if _wave_delay_timer >= WAVE_DELAY:
-			_wave_delay_timer = 0.0
-			_start_wave(_current_wave + 1)
-	else:
-		_wave_delay_timer = 0.0
 
 	if _backend_server_id.is_empty():
 		_registration_retry_timer += delta
@@ -143,6 +189,9 @@ func _on_peer_connected(peer_id: int) -> void:
 	_players[peer_id] = _new_player_state(_spawn_position_for_peer(peer_id))
 	_pending_inputs[peer_id] = {}
 	_player_shoot_timers[peer_id] = 0.0
+	if not _wave_system_started:
+		_wave_system_started = true
+		_spawn_countdown_finished()
 	_notify_lobby_state()
 
 
@@ -150,7 +199,23 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	_players.erase(peer_id)
 	_pending_inputs.erase(peer_id)
 	_player_shoot_timers.erase(peer_id)
-	_notify_lobby_state()
+	if _players.is_empty():
+		_reset_game_state()
+
+
+func _reset_game_state() -> void:
+	_enemies.clear()
+	_projectiles.clear()
+	_current_wave = 0
+	_wave_slots_remaining = 0
+	_wave_delay_timer = 0.0
+	_is_spawning = false
+	_game_over = false
+	_wave_system_started = false
+	_server_tick = 0
+	_next_enemy_id = 0
+	_next_proj_id = 0
+	_snapshot_timer = 0.0
 
 
 @rpc("any_peer", "call_remote", "unreliable")
@@ -237,7 +302,7 @@ func _step_enemy_simulation(delta: float) -> void:
 				var contact_damage: int = enemy.get("contact_damage", ENEMY_CONTACT_DAMAGE)
 				for peer_id: int in _players.keys():
 					var ps: Dictionary = _players[peer_id]
-					if enemy["position"].distance_to(ps["position"]) < CONTACT_RADIUS:
+					if enemy["position"].distance_squared_to(ps["position"]) < CONTACT_RADIUS_SQUARED:
 						ps["health"] -= contact_damage
 						if ps["health"] < 0:
 							ps["health"] = 0
@@ -312,6 +377,7 @@ func _broadcast_snapshot() -> void:
 	var payload: Dictionary = {
 		"server_tick": _server_tick,
 		"wave": _current_wave,
+		"game_over": _game_over,
 		"players": {},
 		"enemies": {},
 		"projectiles": {},
@@ -408,13 +474,15 @@ func _notify_lobby_state() -> void:
 
 
 func _spawn_position_for_peer(peer_id: int) -> Vector2:
-	var spawn_points: Array[Vector2] = [
-		Vector2(-200.0, -200.0),
-		Vector2(200.0, -200.0),
-		Vector2(-200.0, 200.0),
-		Vector2(200.0, 200.0),
+	var spawn_centers: Array[Vector2] = [
+		Vector2(-400.0, -400.0),
+		Vector2(400.0, -400.0),
+		Vector2(-400.0, 400.0),
+		Vector2(400.0, 400.0),
 	]
-	return spawn_points[(peer_id - 1) % spawn_points.size()]
+	var center: Vector2 = spawn_centers[(peer_id - 1) % spawn_centers.size()]
+	var spread: float = 100.0
+	return center + Vector2(randf_range(-spread, spread), randf_range(-spread, spread))
 
 
 func _new_player_state(spawn_position: Vector2) -> Dictionary:

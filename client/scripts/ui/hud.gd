@@ -39,12 +39,15 @@ func _process(_delta: float) -> void:
 	var mouse_pos: Vector2 = get_viewport().get_mouse_position()
 	if _restart_label.get_global_rect().has_point(mouse_pos):
 		if GameData.multiplayer_session_active:
+			NetworkClient.disconnect_from_server()
 			GameData.clear_multiplayer_session()
-			get_tree().change_scene_to_file("res://scenes/ui/lobby.tscn")
+			get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 		else:
+			GameData.clear_multiplayer_session()
 			get_tree().reload_current_scene()
 	elif _menu_label.get_global_rect().has_point(mouse_pos):
 		if GameData.multiplayer_session_active:
+			NetworkClient.disconnect_from_server()
 			GameData.clear_multiplayer_session()
 		get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
@@ -68,7 +71,8 @@ func _on_game_completed(won: bool, time_sec: float, _accuracy: float, shots_fire
 	_stats_label.show()
 	if won:
 		_win_label.show()
-	_restart_label.show()
+	if not GameData.multiplayer_session_active:
+		_restart_label.show()
 	_menu_label.show()
 
 

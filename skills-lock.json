@@ -25,6 +25,12 @@
       "skillPath": "skills/godot-camera-systems/SKILL.md",
       "computedHash": "fd399e7c7e1a926a623fdee92a335d4d88acd73f7785c6652815ee1f4e67916b"
     },
+    "godot-composition": {
+      "source": "thedivergentai/gd-agentic-skills",
+      "sourceType": "github",
+      "skillPath": "skills/godot-composition/SKILL.md",
+      "computedHash": "6b72f52dbde327495521e549db711a463aae7617f84b7e52f3e3b97c9f62bbd7"
+    },
     "godot-game-loop-waves": {
       "source": "thedivergentai/gd-agentic-skills",
       "sourceType": "github",

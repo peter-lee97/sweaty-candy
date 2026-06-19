@@ -10,6 +10,7 @@ var _is_holding: bool = false
 func _ready() -> void:
 	button_down.connect(_on_button_down)
 	button_up.connect(_on_button_up)
+	set_process(false)
 	text = "X"
 
 
@@ -25,18 +26,23 @@ func _process(delta: float) -> void:
 			if quit_on_hold:
 				get_tree().quit()
 			else:
+				if GameData.multiplayer_session_active:
+					NetworkClient.disconnect_from_server()
+					GameData.clear_multiplayer_session()
 				get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 
 func _on_button_down() -> void:
 	_is_holding = true
 	_hold_timer = 0.0
+	set_process(true)
 	GameEvents.ui_blocking_input = true
 
 
 func _on_button_up() -> void:
 	_is_holding = false
 	_hold_timer = 0.0
+	set_process(false)
 	text = "X"
 	modulate = Color.WHITE
 	GameEvents.ui_blocking_input = false

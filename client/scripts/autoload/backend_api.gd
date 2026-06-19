@@ -60,36 +60,52 @@ func connect_lobby_events() -> void:
 	elif ws_base.begins_with("https://"):
 		ws_base = "wss://" + ws_base.substr(8)
 	_ws_url = ws_base + "/v1/lobbies/events?token=" + GameData.token
-	if _ws_connected:
-		_websocket.close()
+	if _ws_connected and _websocket != null:
+		if _websocket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+			_websocket.close()
 		_ws_connected = false
+		_websocket = null
 	_websocket = WebSocketPeer.new()
 	var err: int = _websocket.connect_to_url(_ws_url)
 	if err != OK:
 		push_error("WebSocket connect failed: %d" % err)
+		_websocket = null
 		return
 	_ws_connected = true
 
 
 func disconnect_lobby_events() -> void:
-	if _ws_connected:
-		_websocket.close()
-		_ws_connected = false
+	if _ws_connected and _websocket != null:
+		if _websocket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+			_websocket.close()
+	_ws_connected = false
+	_websocket = null
 
 
 func _process(_delta: float) -> void:
-	if not _ws_connected:
+	if not _ws_connected or _websocket == null:
+		return
+	var state: int = _websocket.get_ready_state()
+	if state == WebSocketPeer.STATE_CLOSED:
+		_ws_connected = false
+		_websocket = null
+		return
+	if state != WebSocketPeer.STATE_CONNECTING and state != WebSocketPeer.STATE_OPEN:
 		return
 	_websocket.poll()
-	var state: int = _websocket.get_ready_state()
+	state = _websocket.get_ready_state()
 	if state == WebSocketPeer.STATE_OPEN:
+		var pending_lobbies: Array = []
 		while _websocket.get_available_packet_count() > 0:
 			var packet: PackedByteArray = _websocket.get_packet()
 			var json: Variant = JSON.parse_string(packet.get_string_from_utf8())
 			if json != null and json.has("lobbies"):
-				lobby_events_updated.emit(json.lobbies)
+				pending_lobbies.append(json.lobbies)
+		for lobbies in pending_lobbies:
+			lobby_events_updated.emit(lobbies)
 	elif state == WebSocketPeer.STATE_CLOSED:
 		_ws_connected = false
+		_websocket = null
 
 
 func _request(method: String, path: String, body: Dictionary = {}) -> Dictionary:

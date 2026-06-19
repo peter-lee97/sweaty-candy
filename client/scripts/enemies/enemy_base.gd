@@ -3,7 +3,7 @@ extends CharacterBody2D
 @export var hp: int = 50
 @export var move_speed: float = 125.0
 @export var score_value: int = 100
-@export var detection_range: float = 600.0
+@export var detection_range: float = INF
 @export var hit_rate: float = 0.5
 @export var contact_damage: int = 10
 const MIN_CHASE_DISTANCE: float = 32.0
@@ -39,7 +39,7 @@ func _physics_process(delta: float) -> void:
 		for i in get_slide_collision_count():
 			var body: Node2D = get_slide_collision(i).get_collider()
 			if body.is_in_group("player") and body.has_method("take_damage"):
-				body.take_damage(contact_damage)
+				body.take_damage(contact_damage, global_position.direction_to(body.global_position))
 				_damage_timer = hit_rate
 				break
 
@@ -80,9 +80,27 @@ func _flash_hit() -> void:
 	$Sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 
 
+func activate(pos: Vector2) -> void:
+	global_position = pos
+	velocity = Vector2.ZERO
+	_knockback = Vector2.ZERO
+	_damage_timer = 0.0
+	show()
+	process_mode = Node.PROCESS_MODE_INHERIT
+	set_physics_process(true)
+
+
+func deactivate() -> void:
+	hide()
+	process_mode = Node.PROCESS_MODE_DISABLED
+	set_physics_process(false)
+
+
 func _die() -> void:
+	GameEvents.enemy_released.emit(self)
 	GameEvents.enemy_killed.emit(global_position, score_value)
-	queue_free()
+	if not get_meta("_managed_by_pool", false):
+		queue_free()
 
 
 func _find_nearest_player() -> Node2D:

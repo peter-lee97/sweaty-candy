@@ -12,5 +12,10 @@ signal wave_completed(wave: int)
 signal respawn_tick(time_left: float)
 signal respawn_complete
 signal game_completed(won: bool, time_sec: float, accuracy: float, shots_fired: int, shots_hit: int)
+signal spawn_projectile_requested(position: Vector2, direction: Vector2)
+signal projectile_expired(projectile: Node2D)
+signal enemy_released(enemy: Node2D)
+signal pickup_collected(pickup: Node2D)
+signal pickup_expired(pickup: Node2D)
 
 var ui_blocking_input: bool = false
