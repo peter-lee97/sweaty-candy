@@ -284,7 +284,7 @@ func _step_enemy_simulation(delta: float) -> void:
 	for enemy: Dictionary in _enemies:
 		var target: Dictionary = _find_nearest_player_for(enemy["position"])
 		var dir: Vector2 = Vector2.ZERO
-		if target:
+		if not target.is_empty():
 			dir = enemy["position"].direction_to(target["position"])
 		var knockback: Vector2 = enemy.get("knockback", Vector2.ZERO)
 		var enemy_speed: float = enemy.get("move_speed", ENEMY_MOVE_SPEED)
@@ -407,6 +407,8 @@ func _find_nearest_player_for(from_pos: Vector2) -> Dictionary:
 	var min_dist: float = INF
 	for peer_id: int in _players.keys():
 		var state: Dictionary = _players[peer_id]
+		if not state.get("alive", false):
+			continue
 		var dist: float = from_pos.distance_squared_to(state["position"])
 		if dist < min_dist:
 			min_dist = dist
