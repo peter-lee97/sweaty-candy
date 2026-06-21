@@ -51,7 +51,10 @@ func _enter_game(lobby: Dictionary) -> void:
 		_status_label.text = "No game server available"
 		return
 	_is_entering = true
-	GameData.multiplayer_server_url = "ws://" + host + ":" + str(port)
+	var protocol: String = "ws://"
+	if port == 443:
+		protocol = "wss://"
+	GameData.multiplayer_server_url = protocol + host + ":" + str(port)
 	BackendApi.disconnect_lobby_events()
 	get_tree().change_scene_to_file("res://scenes/game/game.tscn")
 

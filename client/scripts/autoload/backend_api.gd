@@ -8,6 +8,13 @@ var _ws_connected: bool = false
 var _ws_url: String = ""
 
 
+func _init() -> void:
+	if OS.has_feature("web"):
+		var origin: String = JavaScriptBridge.eval("window.location.origin")
+		if origin:
+			_base_url = origin
+
+
 func is_authenticated() -> bool:
 	return GameData.token != ""
 

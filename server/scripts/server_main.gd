@@ -36,6 +36,7 @@ const MAX_ENEMIES_PER_WAVE: int = 100
 @export var backend_base_url: String = "http://127.0.0.1:8787"
 @export var backend_server_name: String = "Godot 2D Server"
 @export var advertised_host: String = "127.0.0.1"
+@export var advertised_port: int = 0
 @export var heartbeat_interval_sec: float = 10.0
 @export var registration_retry_interval_sec: float = 3.0
 
@@ -61,9 +62,38 @@ var _wave_system_started: bool = false
 
 
 func _ready() -> void:
+	_parse_server_args()
 	var started: bool = _start_server()
 	if started:
 		_register_server_in_backend()
+
+
+func _parse_server_args() -> void:
+	var args: PackedStringArray = OS.get_cmdline_user_args()
+	var i: int = 0
+	while i < args.size():
+		match args[i]:
+			"--listen-port":
+				if i + 1 < args.size():
+					listen_port = int(args[i + 1])
+					i += 1
+			"--advertised-host":
+				if i + 1 < args.size():
+					advertised_host = args[i + 1]
+					i += 1
+			"--advertised-port":
+				if i + 1 < args.size():
+					advertised_port = int(args[i + 1])
+					i += 1
+			"--backend-base-url":
+				if i + 1 < args.size():
+					backend_base_url = args[i + 1]
+					i += 1
+			"--max-players":
+				if i + 1 < args.size():
+					max_players = int(args[i + 1])
+					i += 1
+		i += 1
 
 
 func _spawn_countdown_finished() -> void:
@@ -514,7 +544,7 @@ func _register_server_in_backend() -> void:
 	var payload: Dictionary = {
 		"name": backend_server_name,
 		"host": advertised_host,
-		"port": listen_port,
+		"port": advertised_port if advertised_port > 0 else listen_port,
 		"capacity": max_players
 	}
 	var result: Dictionary = await _http_json("POST", "%s/v1/servers/register" % target_url, payload)

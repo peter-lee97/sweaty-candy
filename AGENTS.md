@@ -221,3 +221,15 @@ GUEST_SESSION_DURATION_MS=3600000 npm start  # Run backend with 1h guest session
 - **Camera2D smoothing**: ensure `position_smoothing_enabled` is set to `true` for smooth camera follow.
 - **Sprite filtering**: disable texture filtering on sprites for pixel-perfect rendering.
 - **Performance with many Sprite2D nodes**: use sprite atlases or merge sprites when possible for better performance.
+
+## Deployment
+
+See [DEPLOY.md](./DEPLOY.md) for full production deployment instructions.
+
+**Quick reference:**
+- Client: `https://shoot.compilechicken.com` (auto-detects backend URL from `window.location.origin`)
+- Backend: Node.js on `localhost:8787` (systemd `sweaty-candy-backend`)
+- Game server: Godot headless on port 7777, registered at `http://localhost:8787/v1/servers` (systemd `sweaty-candy-server`)
+- Caddy on host (not Docker), imports from `/etc/caddy/sites-enabled/*`
+- Game server connects directly via `ws://<ip>:7777` — Caddy cannot proxy Godot WebSocket
+- Server CLI args use `--` separator: `sweaty-server --headless -- --advertised-host <ip> ...`
