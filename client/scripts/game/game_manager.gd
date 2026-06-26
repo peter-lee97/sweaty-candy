@@ -473,6 +473,7 @@ func _spawn_remote_player(id: String, data: Dictionary) -> void:
 	node.global_position = data.get("position", Vector2.ZERO)
 	node.get_node("%Sprite").color = Color(0.3, 0.6, 0.9, 1.0)
 	node.set_meta("network_id", id)
+	node.set_physics_process(false)
 	add_child(node)
 	_remote_player_nodes[id] = node
 	_remote_targets[id] = data.get("position", Vector2.ZERO)

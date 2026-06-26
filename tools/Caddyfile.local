@@ -1,0 +1,11 @@
+http://localhost:8080 {
+	root * /Users/peterlee/development/sweaty-candy/client
+	file_server
+
+	handle /v1/lobbies/events {
+		reverse_proxy localhost:8787
+	}
+	handle /v1/* {
+		reverse_proxy localhost:8787
+	}
+}

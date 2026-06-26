@@ -229,7 +229,7 @@ See [DEPLOY.md](./DEPLOY.md) for full production deployment instructions.
 **Quick reference:**
 - Client: `https://shoot.compilechicken.com` (auto-detects backend URL from `window.location.origin`)
 - Backend: Node.js on `localhost:8787` (systemd `sweaty-candy-backend`)
-- Game server: Godot headless on port 7777, registered at `http://localhost:8787/v1/servers` (systemd `sweaty-candy-server`)
+- Game server: Godot headless on port 7777, proxied through Caddy at `wss://game.compilechicken.com` (systemd `sweaty-candy-server`)
 - Caddy on host (not Docker), imports from `/etc/caddy/sites-enabled/*`
-- Game server connects directly via `ws://<ip>:7777` — Caddy cannot proxy Godot WebSocket
-- Server CLI args use `--` separator: `sweaty-server --headless -- --advertised-host <ip> ...`
+- Game WebSocket via TLS: Caddy proxies `game.compilechicken.com:443` → `localhost:7777`, resolved the "Caddy cannot proxy Godot WebSocket" issue
+- Server CLI args use `--` separator: `sweaty-server --headless -- --advertised-host game.compilechicken.com --advertised-port 443 --listen-port 7777`

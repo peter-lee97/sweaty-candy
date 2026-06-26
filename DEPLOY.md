@@ -3,35 +3,44 @@
 ## Architecture
 
 ```
-┌── VPS (bare metal) ─────────────────────────────────────────────┐
-│                                                                  │
-│  Caddy (port 80/443, systemd)                                    │
-│    shoot.compilechicken.com                                      │
-│      /            → /opt/sweaty-candy/client-export (static)    │
-│      /v1/*        → localhost:8787 (backend API + WS)           │
-│                                                                  │
-│  sweaty-candy-backend (Node.js, systemd)                         │
-│    port 8787 — auth, lobbies, server registry                   │
-│                                                                  │
-│  sweaty-candy-server (Godot headless, systemd)                   │
-│    port 7777 — game server WebSocket (direct, no Caddy proxy)   │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
+┌── VPS (bare metal) ─────────────────────────────────────────────────┐
+│                                                                     │
+│  Caddy (port 80/443, systemd)                                       │
+│    shoot.compilechicken.com                                         │
+│      /            → /opt/sweaty-candy/client-export (static)        │
+│      /v1/*        → localhost:8787 (backend API + WS)               │
+│    game.compilechicken.com                                          │
+│      /            → localhost:7777 (game server WebSocket via TLS)  │
+│                                                                     │
+│  sweaty-candy-backend (Node.js, systemd)                            │
+│    port 8787 — auth, lobbies, server registry                      │
+│                                                                     │
+│  sweaty-candy-server (Godot headless, systemd)                      │
+│    port 7777 — game server WebSocket (proxied through Caddy)        │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
 
 - VPS with Debian 12+
 - Domain name (e.g. `shoot.compilechicken.com`)
-- DNS A record for `shoot` pointing to VPS IP
+- DNS A records for `shoot` and `game` pointing to VPS IP
+
+## DNS
+
+| Record | Type | Value |
+|--------|------|-------|
+| `shoot` | A | VPS IP |
+| `game` | A | VPS IP |
 
 ## Firewall (Hetzner Cloud Console)
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
 | 80 | TCP | HTTP (Let's Encrypt cert challenge) |
-| 443 | TCP | HTTPS (game client + backend API) |
-| 7777 | TCP | Game server WebSocket (direct) |
+| 443 | TCP | HTTPS (game client, backend API, game server WebSocket via Caddy) |
+| 7777 | TCP | Optional — game server WebSocket (direct, for testing without Caddy proxy) |
 
 ## Caddy Setup
 
@@ -65,9 +74,13 @@ shoot.compilechicken.com {
         reverse_proxy localhost:8787
     }
 }
+
+game.compilechicken.com {
+    reverse_proxy localhost:7777
+}
 ```
 
-> **Note on game server WebSocket**: Caddy's `reverse_proxy` cannot proxy WebSocket connections to Godot's `WebSocketMultiplayerPeer` server (returns 503). The game server is exposed directly on port 7777.
+The `game.compilechicken.com` subdomain provides TLS-terminated WebSocket access to the game server. Caddy auto-provisions a Let's Encrypt cert and transparently proxies WebSocket connections to Godot's `WebSocketMultiplayerPeer`.
 
 ### Media converter site config (`/etc/caddy/sites-enabled/mc.caddy`)
 
@@ -102,28 +115,83 @@ cd /opt/sweaty-candy/backend
 npm install
 ```
 
-## Godot Builds
+## Local Development & Testing
+
+### Prerequisites
+
+- Godot 4.6.3+ installed locally
+- Node.js installed locally
+- Caddy installed locally: `brew install caddy` (macOS) or `sudo apt install caddy` (Linux)
+
+### Start all services locally
+
+```bash
+# Terminal 1: Backend
+cd backend && node src/app.js
+
+# Terminal 2: Game server
+godot --headless --path server/ -- --backend-base-url http://localhost:8787 --advertised-host 127.0.0.1 --advertised-port 7777 --listen-port 7777
+
+# Terminal 3: Caddy proxy (serves client + proxies /v1/* to backend)
+caddy run --config tools/Caddyfile.local
+```
+
+### Export client (HTML5/WebAssembly)
+
+```bash
+godot --headless --path client/ --export-release "Web" --quit
+```
+
+Output: `client/index.html`, `client/index.js`, `client/index.wasm`, `client/index.pck`, etc.
+
+### Test multiplayer locally
+
+1. Open `http://localhost:8080` in two browser tabs
+2. Tab 1: Create a lobby → Start Game → you're Player 1
+3. Tab 2: Join the lobby → Start Game → you should see Player 1 (blue tint)
+
+### Stop all services
+
+```bash
+pkill -f "godot.*--path.*server"
+pkill -f "node.*app.js"
+pkill -f "caddy run"
+```
+
+## Production Deploy
 
 ### Prerequisites
 
 - Godot 4.6.3+ installed locally
 - Export templates for Web and Linux installed
+- SSH access to production server
 
-### Export client (HTML5/WebAssembly)
+### Export and upload client
 
 ```bash
-mkdir -p /tmp/sweaty-client-export
-godot --headless --path client/ --export-release "Web" /tmp/sweaty-client-export/index.html
-rsync -avz -e "ssh -i ~/.ssh/vm_access_key" /tmp/sweaty-client-export/ dev@mc.prod:/opt/sweaty-candy/client-export/
+godot --headless --path client/ --export-release "Web" --quit
+rsync -avz -e "ssh -i ~/.ssh/id_ed25519" client/index.* dev@mc.prod:/opt/sweaty-candy/client-export/
 ```
 
-### Export server (Linux x86_64 headless)
+### Export and upload server PCK
 
 ```bash
-mkdir -p /tmp/sweaty-server-build
-godot --headless --path server/ --export-release "Linux" /tmp/sweaty-server-build/sweaty-server
-rsync -avz -e "ssh -i ~/.ssh/vm_access_key" /tmp/sweaty-server-build/sweaty-server dev@mc.prod:/opt/sweaty-candy/server/
-rsync -avz -e "ssh -i ~/.ssh/vm_access_key" /tmp/sweaty-server-build/sweaty-server.pck dev@mc.prod:/opt/sweaty-candy/server/
+godot --headless --path server/ --export-pack "Linux" server/build/sweaty-server.pck --quit
+scp -i ~/.ssh/id_ed25519 server/build/sweaty-server.pck dev@mc.prod:/opt/sweaty-candy/server/sweaty-server.pck
+```
+
+### Restart game server on production
+
+```bash
+ssh -i ~/.ssh/id_ed25519 dev@mc.prod "sudo systemctl restart sweaty-candy-server"
+```
+
+### Verify production
+
+```bash
+ssh -i ~/.ssh/id_ed25519 dev@mc.prod "curl -s http://localhost:8787/health && curl -s http://localhost:8787/v1/servers | head -1"
+nc -z -w 3 <VPS_IP> 7777 && echo "Game server: OPEN" || echo "Game server: CLOSED"
+curl -s https://shoot.compilechicken.com/ | head -1
 ```
 
 ## Systemd Units
@@ -162,7 +230,7 @@ After=network.target sweaty-candy-backend.service
 Type=simple
 User=dev
 WorkingDirectory=/opt/sweaty-candy/server
-ExecStart=/opt/sweaty-candy/server/sweaty-server --headless -- --backend-base-url http://localhost:8787 --advertised-host <VPS_IP> --advertised-port 7777 --listen-port 7777
+ExecStart=/opt/sweaty-candy/server/sweaty-server --headless -- --backend-base-url http://localhost:8787 --advertised-host game.compilechicken.com --advertised-port 443 --listen-port 7777
 Restart=always
 RestartSec=5
 
@@ -170,7 +238,7 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-Replace `<VPS_IP>` with the public IP of your server.
+The `--advertised-host` and `--advertised-port` tell clients to connect via `wss://game.compilechicken.com:443` (TLS-secured WebSocket through Caddy). The `--listen-port` stays on 7777 for local proxy.
 
 ### Enable services
 
@@ -185,9 +253,9 @@ The game server supports these CLI arguments (passed after `--` separator):
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `--listen-port` | `7777` | WebSocket server listen port |
-| `--advertised-host` | `127.0.0.1` | Host sent to backend for clients to connect to |
-| `--advertised-port` | `0` (uses listen_port) | Port sent to backend (use 443 for Caddy proxy) |
+| `--listen-port` | `7777` | WebSocket server listen port (local, behind Caddy proxy) |
+| `--advertised-host` | `127.0.0.1` | Host sent to backend for clients to connect to (use `game.compilechicken.com` for production) |
+| `--advertised-port` | `0` (uses listen_port) | Port sent to backend (use `443` for Caddy proxy with TLS) |
 | `--backend-base-url` | `http://127.0.0.1:8787` | Backend API URL for registration |
 | `--max-players` | `4` | Max connected players |
 
@@ -201,15 +269,15 @@ The game server WebSocket URL uses `wss://` when the port is 443, otherwise `ws:
 
 ## Verification Checklist
 
-- [ ] DNS A record for `shoot` points to VPS IP
-- [ ] Ports 80, 443, 7777 open in firewall
+- [ ] DNS A records for `shoot` and `game` point to VPS IP
+- [ ] Ports 80, 443 open in firewall (port 7777 optional)
 - [ ] Caddy running: `systemctl status caddy`
 - [ ] Backend healthy: `curl http://localhost:8787/health`
-- [ ] Game server registered: `curl http://localhost:8787/v1/servers`
+- [ ] Game server registered: `curl http://localhost:8787/v1/servers` shows host `game.compilechicken.com` and port `443`
 - [ ] Game site accessible: `curl -I https://shoot.compilechicken.com`
-- [ ] Game server reachable: `echo -e "GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n" | nc -w 3 <VPS_IP> 7777 | head -1` should return `HTTP/1.1 101 Switching Protocols`
+- [ ] Game WebSocket via TLS: WebSocket handshake to `wss://game.compilechicken.com` returns `101 Switching Protocols`
+- [ ] Multiplayer test: two browser tabs at `https://shoot.compilechicken.com` can see each other in-game
 
 ## Known Issues
 
-- **Godot WebSocket through Caddy**: Caddy's `reverse_proxy` cannot proxy WebSocket connections to Godot's `WebSocketMultiplayerPeer`. The game server is exposed directly on port 7777 without TLS. This is acceptable for the current phase since game traffic consists only of position updates and game commands.
 - **Caddy Debian package**: The Debian-packaged Caddy `2.6.2-5` silently ignores `reverse_proxy` subdirectives like `flush_interval` and `max_fails`. If these are needed, install from the official Caddy repo (instructions above).
