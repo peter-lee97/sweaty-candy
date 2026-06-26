@@ -28,6 +28,15 @@ func _ready() -> void:
 	BackendApi.connect_lobby_events()
 	_refresh_rooms()
 	_generate_default_name()
+	_refresh_ping()
+
+
+func _refresh_ping() -> void:
+	var ping_ms: int = await BackendApi.ping_backend_avg()
+	if ping_ms < 0:
+		return
+	var rooms: int = _room_table.get_root().get_child_count()
+	_status_label.text = "Ping: %dms | %d rooms found" % [ping_ms, rooms]
 
 
 func _generate_default_name() -> void:
@@ -37,7 +46,6 @@ func _generate_default_name() -> void:
 
 
 func _refresh_rooms() -> void:
-	_status_label.text = "Loading rooms..."
 	var res: Dictionary = await BackendApi.list_lobbies()
 	if not res.ok:
 		_status_label.text = "Failed to load rooms"
@@ -58,7 +66,12 @@ func _update_table(lobbies: Array) -> void:
 		item.set_text(2, str(l.get("state", "")))
 		item.set_text(3, "P" if l.get("isPrivate", false) else "")
 		item.set_metadata(0, str(l.get("id", "")))
-	_status_label.text = str(_room_table.get_root().get_child_count()) + " rooms found"
+	var rooms: int = _room_table.get_root().get_child_count()
+	var ping_ms: int = GameData.backend_ping_ms
+	if ping_ms > 0:
+		_status_label.text = "Ping: %dms | %d rooms found" % [ping_ms, rooms]
+	else:
+		_status_label.text = str(rooms) + " rooms found"
 
 
 func _on_lobby_events(lobbies: Array) -> void:

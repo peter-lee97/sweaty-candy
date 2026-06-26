@@ -2,6 +2,9 @@ extends Node
 
 signal lobby_events_updated(lobbies: Array)
 
+const PING_SAMPLE_COUNT: int = 3
+const PING_TIMEOUT_SEC: float = 3.0
+
 var _base_url: String = "http://127.0.0.1:8787"
 var _websocket: WebSocketPeer = WebSocketPeer.new()
 var _ws_connected: bool = false
@@ -17,6 +20,41 @@ func _init() -> void:
 
 func is_authenticated() -> bool:
 	return GameData.token != ""
+
+
+func ping_backend() -> int:
+	var http: HTTPRequest = HTTPRequest.new()
+	add_child(http)
+	http.timeout = PING_TIMEOUT_SEC
+	var url: String = _base_url + "/health"
+	var t0: int = Time.get_ticks_msec()
+	var err: int = http.request(url, PackedStringArray(), HTTPClient.METHOD_GET, "")
+	if err != OK:
+		http.queue_free()
+		return -1
+	var result: Array = await http.request_completed
+	http.queue_free()
+	if result[0] != HTTPRequest.RESULT_SUCCESS:
+		return -1
+	var code: int = result[1]
+	if code < 200 or code >= 300:
+		return -1
+	return Time.get_ticks_msec() - t0
+
+
+func ping_backend_avg(samples: int = PING_SAMPLE_COUNT) -> int:
+	var total: int = 0
+	var count: int = 0
+	for i in samples:
+		var ms: int = await ping_backend()
+		if ms >= 0:
+			total += ms
+			count += 1
+	if count == 0:
+		return -1
+	var avg: int = int(total / float(count))
+	GameData.backend_ping_ms = avg
+	return avg
 
 
 func authenticate_guest() -> Dictionary:

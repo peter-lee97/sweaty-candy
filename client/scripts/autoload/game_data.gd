@@ -8,6 +8,8 @@ var multiplayer_session_active: bool = false
 var user_id: String = ""
 var username: String = ""
 var token: String = ""
+var backend_ping_ms: int = 0
+var game_server_ping_ms: int = 0
 
 
 func clear_multiplayer_session() -> void:

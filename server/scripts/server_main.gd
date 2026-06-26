@@ -27,6 +27,12 @@ const SPAWN_STAGGER: float = 0.35
 const SPAWN_INSET: float = 80.0
 const SPAWN_BAND_WIDTH: float = 200.0
 const MAX_ENEMIES_PER_WAVE: int = 100
+const RTT_THRESHOLD_FAIR: int = 100
+const RTT_THRESHOLD_POOR: int = 200
+const SYNC_HZ_FAIR: float = 15.0
+const SYNC_HZ_POOR: float = 10.0
+const DELTA_POSITION_THRESHOLD: float = 1.0
+const FULL_SYNC_INTERVAL_SEC: float = 1.0
 
 @export var listen_port: int = 7777
 @export var max_players: int = 4
@@ -49,6 +55,10 @@ var _pending_inputs: Dictionary = {}
 var _backend_server_id: String = ""
 var _is_registering_backend: bool = false
 var _player_shoot_timers: Dictionary = {}
+var _player_rtt: Dictionary = {}
+var _player_snapshot_timers: Dictionary = {}
+var _last_sent_state: Dictionary = {}
+var _full_sync_timer: float = 0.0
 var _enemies: Array[Dictionary] = []
 var _projectiles: Array[Dictionary] = []
 var _next_enemy_id: int = 0
@@ -181,10 +191,7 @@ func _physics_process(delta: float) -> void:
 			else:
 				_wave_delay_timer = 0.0
 
-	_snapshot_timer += delta
-	if _snapshot_timer >= (1.0 / snapshot_rate_hz):
-		_snapshot_timer = 0.0
-		_broadcast_snapshot()
+	_send_adaptive_snapshots(delta)
 
 	if _backend_server_id.is_empty():
 		_registration_retry_timer += delta
@@ -219,6 +226,9 @@ func _on_peer_connected(peer_id: int) -> void:
 	_players[peer_id] = _new_player_state(_spawn_position_for_peer(peer_id))
 	_pending_inputs[peer_id] = {}
 	_player_shoot_timers[peer_id] = 0.0
+	_player_rtt[peer_id] = 0
+	_player_snapshot_timers[peer_id] = 0.0
+	_last_sent_state[peer_id] = {}
 	if not _wave_system_started:
 		_wave_system_started = true
 		_spawn_countdown_finished()
@@ -229,6 +239,9 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	_players.erase(peer_id)
 	_pending_inputs.erase(peer_id)
 	_player_shoot_timers.erase(peer_id)
+	_player_rtt.erase(peer_id)
+	_player_snapshot_timers.erase(peer_id)
+	_last_sent_state.erase(peer_id)
 	if _players.is_empty():
 		_reset_game_state()
 
@@ -246,6 +259,10 @@ func _reset_game_state() -> void:
 	_next_enemy_id = 0
 	_next_proj_id = 0
 	_snapshot_timer = 0.0
+	_player_rtt.clear()
+	_player_snapshot_timers.clear()
+	_last_sent_state.clear()
+	_full_sync_timer = 0.0
 
 
 @rpc("any_peer", "call_remote", "unreliable")
@@ -253,8 +270,23 @@ func receive_server_snapshot(_payload: Dictionary) -> void:
 	pass
 
 
+@rpc("any_peer", "call_remote", "unreliable")
+func pong_client(_t: int) -> void:
+	pass
+
+
 @rpc("any_peer", "unreliable")
-func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, weapon_cycle: int) -> void:
+func ping_server(t: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if sender_id <= 0:
+		return
+	pong_client.rpc_id(sender_id, t)
+
+
+@rpc("any_peer", "unreliable")
+func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, weapon_cycle: int, rtt: int) -> void:
 	if not multiplayer.is_server():
 		return
 	var peer_id: int = multiplayer.get_remote_sender_id()
@@ -267,6 +299,8 @@ func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, w
 		"shoot": shoot,
 		"weapon_cycle": weapon_cycle
 	}
+	if rtt >= 0:
+		_player_rtt[peer_id] = rtt
 
 
 func _step_player_simulation(delta: float) -> void:
@@ -403,33 +437,173 @@ func _step_respawn_timers(delta: float) -> void:
 		_players[peer_id] = state
 
 
-func _broadcast_snapshot() -> void:
+func _send_adaptive_snapshots(delta: float) -> void:
+	if _players.is_empty():
+		return
+	_full_sync_timer += delta
+	var is_full: bool = _full_sync_timer >= FULL_SYNC_INTERVAL_SEC
+	if is_full:
+		_full_sync_timer = 0.0
+	var peers_needing_snapshot: Array[int] = []
+	for peer_id: int in _players.keys():
+		var timer: float = _player_snapshot_timers.get(peer_id, 0.0) + delta
+		_player_snapshot_timers[peer_id] = timer
+		var interval: float = _get_snapshot_interval_for_rtt(_player_rtt.get(peer_id, 0))
+		if timer >= interval:
+			_player_snapshot_timers[peer_id] = 0.0
+			peers_needing_snapshot.append(peer_id)
+	if peers_needing_snapshot.is_empty():
+		return
+	for peer_id: int in peers_needing_snapshot:
+		var payload: Dictionary = _build_snapshot_payload(peer_id, is_full)
+		receive_server_snapshot.rpc_id(peer_id, payload)
+
+
+func _get_snapshot_interval_for_rtt(rtt_ms: int) -> float:
+	if rtt_ms > RTT_THRESHOLD_POOR:
+		return 1.0 / SYNC_HZ_POOR
+	if rtt_ms > RTT_THRESHOLD_FAIR:
+		return 1.0 / SYNC_HZ_FAIR
+	return 1.0 / snapshot_rate_hz
+
+
+func _build_snapshot_payload(peer_id: int, is_full: bool) -> Dictionary:
+	var last_state: Dictionary = _last_sent_state.get(peer_id, {})
+	var last_players: Dictionary = last_state.get("players", {})
+	var last_enemies: Dictionary = last_state.get("enemies", {})
+	var last_projectiles: Dictionary = last_state.get("projectiles", {})
 	var payload: Dictionary = {
 		"server_tick": _server_tick,
 		"wave": _current_wave,
 		"game_over": _game_over,
+		"full": is_full,
 		"players": {},
 		"enemies": {},
 		"projectiles": {},
 	}
-	for peer_id: int in _players.keys():
-		var ps: Dictionary = _players[peer_id]
-		payload["players"][peer_id] = {
+	for pid: int in _players.keys():
+		var ps: Dictionary = _players[pid]
+		var pos: Vector2 = ps["position"]
+		var health: int = ps["health"]
+		var respawn: float = ps.get("respawn_timer", 0.0)
+		var should_send: bool = is_full
+		if not is_full:
+			var last_pd: Dictionary = last_players.get(str(pid), {})
+			if last_pd.is_empty():
+				should_send = true
+			elif pos.distance_to(last_pd.get("position", pos)) >= DELTA_POSITION_THRESHOLD:
+				should_send = true
+			elif health != last_pd.get("health", health):
+				should_send = true
+			elif respawn != last_pd.get("respawn_timer", respawn):
+				should_send = true
+		if should_send:
+			payload["players"][pid] = {
+				"position": pos,
+				"health": health,
+				"respawn_timer": respawn,
+			}
+			last_players[str(pid)] = {
+				"position": pos,
+				"health": health,
+				"respawn_timer": respawn,
+			}
+	for enemy: Dictionary in _enemies:
+		var eid: String = str(enemy["id"])
+		var pos: Vector2 = enemy["position"]
+		var should_send: bool = is_full
+		if not is_full:
+			var last_ed: Dictionary = last_enemies.get(eid, {})
+			if last_ed.is_empty():
+				should_send = true
+			elif pos.distance_to(last_ed.get("position", pos)) >= DELTA_POSITION_THRESHOLD:
+				should_send = true
+		if should_send:
+			payload["enemies"][eid] = {
+				"position": pos,
+				"type": enemy.get("type", "base"),
+			}
+			last_enemies[eid] = {"position": pos}
+	for proj: Dictionary in _projectiles:
+		var pid: String = str(proj["id"])
+		var pos: Vector2 = proj["position"]
+		var should_send: bool = is_full
+		if not is_full:
+			var last_pd: Dictionary = last_projectiles.get(pid, {})
+			if last_pd.is_empty():
+				should_send = true
+			elif pos.distance_to(last_pd.get("position", pos)) >= DELTA_POSITION_THRESHOLD:
+				should_send = true
+		if should_send:
+			payload["projectiles"][pid] = {
+				"position": pos,
+				"direction": proj["direction"],
+			}
+			last_projectiles[pid] = {"position": pos}
+	var removed_players: Array[String] = []
+	var removed_enemies: Array[String] = []
+	var removed_projectiles: Array[String] = []
+	for key: String in last_players.keys():
+		if not _players.has(int(key)):
+			removed_players.append(key)
+			last_players.erase(key)
+	var current_enemies: Dictionary = {}
+	for enemy: Dictionary in _enemies:
+		current_enemies[str(enemy["id"])] = true
+	for key: String in last_enemies.keys():
+		if not current_enemies.has(key):
+			removed_enemies.append(key)
+			last_enemies.erase(key)
+	var current_projectiles: Dictionary = {}
+	for proj: Dictionary in _projectiles:
+		current_projectiles[str(proj["id"])] = true
+	for key: String in last_projectiles.keys():
+		if not current_projectiles.has(key):
+			removed_projectiles.append(key)
+			last_projectiles.erase(key)
+	payload["removed_players"] = removed_players
+	payload["removed_enemies"] = removed_enemies
+	payload["removed_projectiles"] = removed_projectiles
+	if is_full:
+		last_players = _snapshot_players_dict()
+		last_enemies = _snapshot_enemies_dict()
+		last_projectiles = _snapshot_projectiles_dict()
+	_last_sent_state[peer_id] = {
+		"players": last_players,
+		"enemies": last_enemies,
+		"projectiles": last_projectiles,
+	}
+	return payload
+
+
+func _snapshot_players_dict() -> Dictionary:
+	var d: Dictionary = {}
+	for pid: int in _players.keys():
+		var ps: Dictionary = _players[pid]
+		d[str(pid)] = {
 			"position": ps["position"],
 			"health": ps["health"],
 			"respawn_timer": ps.get("respawn_timer", 0.0),
 		}
+	return d
+
+
+func _snapshot_enemies_dict() -> Dictionary:
+	var d: Dictionary = {}
 	for enemy: Dictionary in _enemies:
-		payload["enemies"][str(enemy["id"])] = {
-			"position": enemy["position"],
-			"type": enemy.get("type", "base"),
-		}
+		d[str(enemy["id"])] = {"position": enemy["position"]}
+	return d
+
+
+func _snapshot_projectiles_dict() -> Dictionary:
+	var d: Dictionary = {}
 	for proj: Dictionary in _projectiles:
-		payload["projectiles"][str(proj["id"])] = {
-			"position": proj["position"],
-			"direction": proj["direction"],
-		}
-	rpc("receive_server_snapshot", payload)
+		d[str(proj["id"])] = {"position": proj["position"]}
+	return d
+
+
+func _broadcast_snapshot() -> void:
+	rpc("receive_server_snapshot", _build_snapshot_payload(1, true))
 
 
 func _find_nearest_player_for(from_pos: Vector2) -> Dictionary:

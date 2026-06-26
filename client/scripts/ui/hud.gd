@@ -1,5 +1,7 @@
 extends CanvasLayer
 
+const PING_UPDATE_INTERVAL: float = 0.5
+
 @onready var _health_bar: ProgressBar = %HealthBar
 @onready var _game_over_label: Label = %GameOverLabel
 @onready var _restart_label: Label = %RestartLabel
@@ -9,6 +11,9 @@ extends CanvasLayer
 @onready var _wave_label: Label = %WaveLabel
 @onready var _menu_label: Label = %MenuLabel
 @onready var _respawn_label: Label = %RespawnLabel
+@onready var _ping_label: Label = %PingLabel
+
+var _ping_update_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -28,9 +33,19 @@ func _ready() -> void:
 	_wave_label.hide()
 	_menu_label.hide()
 	_respawn_label.hide()
+	_ping_label.hide()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if GameData.multiplayer_session_active:
+		_ping_update_timer += delta
+		if _ping_update_timer >= PING_UPDATE_INTERVAL:
+			_ping_update_timer = 0.0
+			_update_ping_label()
+	else:
+		if _ping_label.visible:
+			_ping_label.hide()
+
 	if not Input.is_action_just_pressed("shoot"):
 		return
 	if not (_game_over_label.visible or _win_label.visible):
@@ -50,6 +65,23 @@ func _process(_delta: float) -> void:
 			NetworkClient.disconnect_from_server()
 			GameData.clear_multiplayer_session()
 		get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
+
+
+func _update_ping_label() -> void:
+	var rtt: int = NetworkClient.get_rtt()
+	if rtt <= 0:
+		_ping_label.hide()
+		return
+	var color: Color
+	if rtt > 300:
+		color = Color(0.9, 0.3, 0.3, 0.9)
+	elif rtt > 150:
+		color = Color(0.9, 0.8, 0.3, 0.9)
+	else:
+		color = Color(0.5, 0.9, 0.5, 0.9)
+	_ping_label.add_theme_color_override("font_color", color)
+	_ping_label.text = "Ping: %dms" % rtt
+	_ping_label.show()
 
 
 func _on_player_health_changed(current: int, max_hp: int) -> void:

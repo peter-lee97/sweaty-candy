@@ -8,11 +8,21 @@ extends Control
 @onready var _start_button: Button = %StartButton
 
 var _is_entering: bool = false
+var _ping_timeout: float = 0.0
+var _ping_done: bool = false
 
 
 func _ready() -> void:
 	BackendApi.lobby_events_updated.connect(_on_lobby_events)
 	_refresh()
+
+
+func _process(delta: float) -> void:
+	if _ping_timeout > 0.0:
+		_ping_timeout -= delta
+		if _ping_timeout <= 0.0:
+			_ping_timeout = 0.0
+			_finish_ping_measurement(-1)
 
 
 func _refresh() -> void:
@@ -56,6 +66,53 @@ func _enter_game(lobby: Dictionary) -> void:
 		protocol = "wss://"
 	GameData.multiplayer_server_url = protocol + host + ":" + str(port)
 	BackendApi.disconnect_lobby_events()
+	_measure_game_server_ping()
+
+
+func _measure_game_server_ping() -> void:
+	_status_label.text = "Connecting to game server..."
+	_ping_done = false
+	NetworkClient.rtt_updated.connect(_on_first_rtt)
+	NetworkClient.connection_failed.connect(_on_ping_connect_failed)
+	NetworkClient.connect_to_server(GameData.multiplayer_server_url)
+	_ping_timeout = 3.0
+
+
+func _on_ping_connect_failed(_reason: String) -> void:
+	_finish_ping_measurement(-1)
+
+
+func _on_first_rtt(rtt_ms: int) -> void:
+	_finish_ping_measurement(rtt_ms)
+
+
+func _finish_ping_measurement(rtt_ms: int) -> void:
+	if _ping_done:
+		return
+	_ping_done = true
+	_ping_timeout = 0.0
+	if NetworkClient.rtt_updated.is_connected(_on_first_rtt):
+		NetworkClient.rtt_updated.disconnect(_on_first_rtt)
+	if NetworkClient.connection_failed.is_connected(_on_ping_connect_failed):
+		NetworkClient.connection_failed.disconnect(_on_ping_connect_failed)
+	if rtt_ms >= 0:
+		var label: String = "Server ping: %dms" % rtt_ms
+		if rtt_ms > 300:
+			label += " (poor)"
+		elif rtt_ms > 150:
+			label += " (fair)"
+		else:
+			label += " (good)"
+		_status_label.text = label
+		NetworkClient.disconnect_from_server()
+		await get_tree().create_timer(1.0).timeout
+	else:
+		_status_label.text = "Game server unreachable, starting anyway..."
+		NetworkClient.disconnect_from_server()
+	_proceed_to_game()
+
+
+func _proceed_to_game() -> void:
 	get_tree().change_scene_to_file("res://scenes/game/game.tscn")
 
 
