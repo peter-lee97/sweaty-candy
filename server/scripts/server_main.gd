@@ -286,7 +286,7 @@ func ping_server(t: int) -> void:
 
 
 @rpc("any_peer", "unreliable")
-func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, weapon_cycle: int, rtt: int) -> void:
+func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, weapon_cycle: int, rtt: int, local_seq: int) -> void:
 	if not multiplayer.is_server():
 		return
 	var peer_id: int = multiplayer.get_remote_sender_id()
@@ -297,7 +297,8 @@ func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, w
 		"move": move,
 		"aim": aim,
 		"shoot": shoot,
-		"weapon_cycle": weapon_cycle
+		"weapon_cycle": weapon_cycle,
+		"local_seq": local_seq,
 	}
 	if rtt >= 0:
 		_player_rtt[peer_id] = rtt
@@ -333,7 +334,7 @@ func _step_player_simulation(delta: float) -> void:
 
 		if intent.get("shoot", false) and shoot_timer <= 0.0:
 			_player_shoot_timers[peer_id] = PROJ_COOLDOWN
-			_spawn_projectile(position, aim.normalized(), peer_id)
+			_spawn_projectile(position, aim.normalized(), peer_id, intent.get("local_seq", -1))
 
 		state["position"] = position
 		state["velocity"] = velocity
@@ -535,10 +536,13 @@ func _build_snapshot_payload(peer_id: int, is_full: bool) -> Dictionary:
 			elif pos.distance_to(last_pd.get("position", pos)) >= DELTA_POSITION_THRESHOLD:
 				should_send = true
 		if should_send:
-			payload["projectiles"][pid] = {
+			var proj_data: Dictionary = {
 				"position": pos,
 				"direction": proj["direction"],
 			}
+			if proj.has("local_seq"):
+				proj_data["local_seq"] = proj["local_seq"]
+			payload["projectiles"][pid] = proj_data
 			last_projectiles[pid] = {"position": pos}
 	var removed_players: Array[String] = []
 	var removed_enemies: Array[String] = []
@@ -602,9 +606,6 @@ func _snapshot_projectiles_dict() -> Dictionary:
 	return d
 
 
-func _broadcast_snapshot() -> void:
-	rpc("receive_server_snapshot", _build_snapshot_payload(1, true))
-
 
 func _find_nearest_player_for(from_pos: Vector2) -> Dictionary:
 	var nearest: Dictionary
@@ -651,14 +652,17 @@ func _spawn_enemy(pos: Vector2, type: String = "base") -> int:
 	return eid
 
 
-func _spawn_projectile(pos: Vector2, dir: Vector2, _owner_peer: int) -> int:
+func _spawn_projectile(pos: Vector2, dir: Vector2, _owner_peer: int, local_seq: int = -1) -> int:
 	var pid: int = _next_proj_id
 	_next_proj_id += 1
-	_projectiles.append({
+	var data: Dictionary = {
 		"id": pid,
 		"position": pos,
 		"direction": dir,
-	})
+	}
+	if local_seq >= 0:
+		data["local_seq"] = local_seq
+	_projectiles.append(data)
 	return pid
 
 

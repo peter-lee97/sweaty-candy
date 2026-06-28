@@ -1,0 +1,18 @@
+[gd_resource type="Theme" load_steps=2 format=3]
+
+[resource]
+default_font_size = 16
+Label/font_sizes/font_size = 22
+Label/font_sizes/small = 16
+Label/font_sizes/body = 20
+Label/font_sizes/large = 28
+Label/font_sizes/heading = 36
+Label/font_sizes/section = 48
+Label/font_sizes/hero = 84
+Label/font_sizes/countdown = 64
+Button/font_sizes/font_size = 28
+Button/font_sizes/small = 20
+Button/font_sizes/hero = 52
+LineEdit/font_sizes/font_size = 22
+Tree/font_sizes/font_size = 16
+SpinBox/font_sizes/font_size = 22

@@ -1,7 +1,7 @@
 extends CharacterBody2D
 
 @export var hp: int = 50
-@export var move_speed: float = 125.0
+@export var move_speed: float = 80.0
 @export var score_value: int = 100
 @export var detection_range: float = INF
 @export var hit_rate: float = 0.5
@@ -29,6 +29,7 @@ func _physics_process(delta: float) -> void:
 		velocity = global_position.direction_to(player.global_position) * move_speed + _knockback
 	else:
 		velocity = _knockback
+	velocity = velocity.limit_length(move_speed * 2.5)
 	_knockback = _knockback.lerp(Vector2.ZERO, delta * 8.0)
 	if _knockback.length() < 2.0:
 		_knockback = Vector2.ZERO

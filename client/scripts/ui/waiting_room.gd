@@ -45,7 +45,6 @@ func _update_display(lobby: Dictionary) -> void:
 	_players_label.text = "Players: " + str(lobby.get("currentPlayers", 0)) + " / " + str(lobby.get("maxPlayers", 0))
 	_state_label.text = "State: " + str(lobby.get("state", ""))
 	GameData.multiplayer_owner_user_id = str(lobby.get("ownerUserId", ""))
-	GameData.multiplayer_lobby_name = str(lobby.get("name", ""))
 	var is_owner: bool = GameData.multiplayer_owner_user_id == GameData.user_id
 	_start_button.visible = is_owner
 	if lobby.get("state", "") == "Started":

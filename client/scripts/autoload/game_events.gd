@@ -8,7 +8,6 @@ signal enemy_killed(kill_position: Vector2, score_value: int)
 signal countdown_tick(seconds_left: int)
 signal countdown_finished
 signal wave_started(wave: int)
-signal wave_completed(wave: int)
 signal respawn_tick(time_left: float)
 signal respawn_complete
 signal game_completed(won: bool, time_sec: float, accuracy: float, shots_fired: int, shots_hit: int)

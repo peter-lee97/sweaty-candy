@@ -52,19 +52,18 @@ func disconnect_from_server() -> void:
 	_last_ping_send = 0
 	_rtt_ms = 0
 	_rtt_history.clear()
-	GameData.game_server_ping_ms = 0
 
 
 func has_connection() -> bool:
 	return _connected
 
 
-func send_player_intent(tick: int, move_dir: Vector2, aim_dir: Vector2, wants_shoot: bool, weapon_cycle: int) -> void:
+func send_player_intent(tick: int, move_dir: Vector2, aim_dir: Vector2, wants_shoot: bool, weapon_cycle: int, local_proj_seq: int) -> void:
 	if not _connected or not _peer:
 		return
 	if _peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
 		return
-	rpc_id(_server_peer_id, "submit_player_intent", tick, move_dir, aim_dir, wants_shoot, weapon_cycle, _rtt_ms)
+	rpc_id(_server_peer_id, "submit_player_intent", tick, move_dir, aim_dir, wants_shoot, weapon_cycle, _rtt_ms, local_proj_seq)
 
 
 func _process(delta: float) -> void:
@@ -86,10 +85,6 @@ func _send_ping() -> void:
 	ping_server.rpc_id(_server_peer_id, _last_ping_send)
 
 
-func send_ping_now() -> void:
-	_ping_timer = 0.0
-	_send_ping()
-
 
 func get_rtt() -> int:
 	return _rtt_ms
@@ -103,7 +98,6 @@ func _record_rtt(rtt: int) -> void:
 	for v in _rtt_history:
 		total += v
 	_rtt_ms = int(total / float(_rtt_history.size()))
-	GameData.game_server_ping_ms = _rtt_ms
 	rtt_updated.emit(_rtt_ms)
 
 
@@ -140,7 +134,7 @@ func receive_server_snapshot(snapshot_data: Dictionary) -> void:
 
 
 @rpc("any_peer", "unreliable")
-func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, weapon_cycle: int, rtt: int) -> void:
+func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, weapon_cycle: int, rtt: int, local_proj_seq: int) -> void:
 	pass
 
 

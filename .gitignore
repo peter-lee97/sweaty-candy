@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+*.swp
+
+# Godot editor cache
+client/.godot/editor/
+client/.godot/exported/
+client/.godot/imported/
+client/.godot/scene_groups_cache.cfg
+
+# Godot server cache
+server/.godot/
+
+# Server build
+server/build/
+
+# Node
+node_modules/
+
+# Data
+data/
+
+# Dev
+dev.sh

@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/waiting_room.gd" id="1_script"]
+[ext_resource type="Theme" path="res://resources/ui/default_theme.tres" id="2_theme"]
 
 [node name="WaitingRoom" type="Control"]
 anchors_preset = 15
@@ -8,6 +9,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme = ExtResource("2_theme")
 script = ExtResource("1_script")
 
 [node name="Background" type="ColorRect" parent="."]
@@ -22,46 +24,44 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -200.0
-offset_top = -150.0
-offset_right = 200.0
-offset_bottom = 150.0
-theme_override_constants/separation = 14
+offset_left = -280.0
+offset_top = -180.0
+offset_right = 280.0
+offset_bottom = 180.0
+theme_override_constants/separation = 20
 
 [node name="Title" type="Label" parent="VBoxContainer"]
 text = "Waiting Room"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/section = 48
 theme_override_colors/font_color = Color(0.9, 0.4, 0.2, 1.0)
 
 [node name="RoomNameLabel" type="Label" parent="VBoxContainer"]
 unique_name_in_owner = true
 text = "..."
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/large = 28
 theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1.0)
 
 [node name="RoomIdLabel" type="Label" parent="VBoxContainer"]
 unique_name_in_owner = true
 text = ""
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/small = 16
 theme_override_colors/font_color = Color(0.5, 0.5, 0.6, 1.0)
 
 [node name="PlayersLabel" type="Label" parent="VBoxContainer"]
 unique_name_in_owner = true
 text = ""
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 18
 
 [node name="StateLabel" type="Label" parent="VBoxContainer"]
 unique_name_in_owner = true
 text = ""
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 18
 
 [node name="Spacer" type="Control" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 30)
+custom_minimum_size = Vector2(0, 32)
 
 [node name="ButtonsRow" type="HBoxContainer" parent="VBoxContainer"]
 theme_override_constants/separation = 16
@@ -69,18 +69,16 @@ theme_override_constants/separation = 16
 [node name="StartButton" type="Button" parent="VBoxContainer/ButtonsRow"]
 unique_name_in_owner = true
 text = "Start Game"
-theme_override_font_sizes/font_size = 22
 visible = false
 
 [node name="LeaveButton" type="Button" parent="VBoxContainer/ButtonsRow"]
 text = "Leave"
-theme_override_font_sizes/font_size = 22
 
 [node name="StatusLabel" type="Label" parent="VBoxContainer"]
 unique_name_in_owner = true
 text = ""
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/body = 20
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1.0)
 
 [connection signal="pressed" from="VBoxContainer/ButtonsRow/StartButton" to="." method="_on_start_pressed"]

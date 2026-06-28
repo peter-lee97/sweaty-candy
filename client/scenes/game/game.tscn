@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://d2udwhih3mm3k" path="res://scripts/ui/hud.gd" id="4_hud_script"]
 [ext_resource type="Script" uid="uid://cdi5v1crtwn5m" path="res://scripts/player/camera_follow.gd" id="5_camera_script"]
 [ext_resource type="PackedScene" path="res://scenes/ui/exit_button.tscn" id="9_exit"]
+[ext_resource type="Theme" path="res://resources/ui/default_theme.tres" id="10_theme"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_wall_h"]
 size = Vector2(2840, 20)
@@ -73,206 +74,6 @@ shape = SubResource("RectangleShape2D_wall_v")
 position = Vector2(1410, 0)
 shape = SubResource("RectangleShape2D_wall_v")
 
-[node name="PlayerSpawn" type="Marker2D" parent="." unique_id=373802600]
-unique_name_in_owner = true
-
-[node name="EnemySpawnTL" type="Marker2D" parent="."]
-position = Vector2(-600, -200)
-unique_name_in_owner = true
-
-[node name="EnemySpawnBR" type="Marker2D" parent="."]
-position = Vector2(600, 200)
-unique_name_in_owner = true
-
-[node name="EnemySpawnZone" type="Area2D" parent="."]
-unique_name_in_owner = true
-
-[node name="EdgeTop" type="CollisionShape2D" parent="EnemySpawnZone"]
-position = Vector2(0, -1220)
-shape = SubResource("RectangleShape2D_spawn_h")
-
-[node name="EdgeRight" type="CollisionShape2D" parent="EnemySpawnZone"]
-position = Vector2(1220, 0)
-shape = SubResource("RectangleShape2D_spawn_v")
-
-[node name="EdgeBottom" type="CollisionShape2D" parent="EnemySpawnZone"]
-position = Vector2(0, 1220)
-shape = SubResource("RectangleShape2D_spawn_h")
-
-[node name="EdgeLeft" type="CollisionShape2D" parent="EnemySpawnZone"]
-position = Vector2(-1220, 0)
-shape = SubResource("RectangleShape2D_spawn_v")
-
-[node name="EntityContainer" type="Node2D" parent="." unique_id=1984937077]
-unique_name_in_owner = true
-
-[node name="Players" type="Node2D" parent="EntityContainer" unique_id=1099272114]
-
-[node name="Enemies" type="Node2D" parent="EntityContainer"]
-
-[node name="Pickups" type="Node2D" parent="EntityContainer"]
-
-[node name="Projectiles" type="Node2D" parent="EntityContainer"]
-
-[node name="HUD" type="CanvasLayer" parent="." unique_id=1125374998]
-script = ExtResource("4_hud_script")
-
-[node name="HealthBar" type="ProgressBar" parent="HUD" unique_id=1208201283]
-unique_name_in_owner = true
-offset_left = 20.0
-offset_top = 20.0
-offset_right = 220.0
-offset_bottom = 45.0
-theme_override_styles/background = SubResource("StyleBoxFlat_health")
-theme_override_styles/fill = SubResource("StyleBoxFlat_health_fill")
-value = 100.0
-show_percentage = false
-
-[node name="PingLabel" type="Label" parent="HUD"]
-unique_name_in_owner = true
-anchor_left = 1.0
-anchor_top = 0.0
-anchor_right = 1.0
-anchor_bottom = 0.0
-offset_left = -130.0
-offset_top = 20.0
-offset_right = -20.0
-offset_bottom = 45.0
-theme_override_colors/font_color = Color(0.7, 0.85, 0.7, 0.85)
-theme_override_font_sizes/font_size = 18
-horizontal_alignment = 2
-text = ""
-
-[node name="StatsLabel" type="Label" parent="HUD" unique_id=1642736728]
-unique_name_in_owner = true
-anchors_preset = 7
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -200.0
-offset_top = -140.0
-offset_right = 200.0
-offset_bottom = -110.0
-theme_override_colors/font_color = Color(0.9, 0.9, 0.4, 1)
-theme_override_font_sizes/font_size = 20
-horizontal_alignment = 1
-
-[node name="CountdownLabel" type="Label" parent="HUD"]
-unique_name_in_owner = true
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -100.0
-offset_top = -180.0
-offset_right = 100.0
-offset_bottom = -130.0
-theme_override_colors/font_color = Color(1, 1, 0.3, 1)
-theme_override_font_sizes/font_size = 64
-horizontal_alignment = 1
-
-[node name="WaveLabel" type="Label" parent="HUD"]
-unique_name_in_owner = true
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -150.0
-offset_top = -240.0
-offset_right = 150.0
-offset_bottom = -190.0
-theme_override_colors/font_color = Color(0.2, 0.8, 1.0, 1)
-theme_override_font_sizes/font_size = 36
-horizontal_alignment = 1
-
-[node name="ExitButton" parent="HUD" unique_id=1621529152 instance=ExtResource("9_exit")]
-
-[node name="RespawnLabel" type="Label" parent="HUD"]
-unique_name_in_owner = true
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -200.0
-offset_top = 50.0
-offset_right = 200.0
-offset_bottom = 90.0
-theme_override_colors/font_color = Color(1.0, 0.3, 0.3, 0.6)
-theme_override_font_sizes/font_size = 30
-horizontal_alignment = 1
-
-[node name="GameOverLabel" type="Label" parent="HUD" unique_id=1458967569]
-unique_name_in_owner = true
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -100.0
-offset_top = -50.0
-offset_right = 100.0
-offset_bottom = -20.0
-theme_override_colors/font_color = Color(0.9, 0.2, 0.2, 1)
-theme_override_font_sizes/font_size = 36
-text = "GAME OVER"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="WinLabel" type="Label" parent="HUD" unique_id=1448005617]
-unique_name_in_owner = true
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -100.0
-offset_top = -50.0
-offset_right = 100.0
-offset_bottom = -20.0
-theme_override_colors/font_color = Color(0.2, 0.9, 0.2, 1)
-theme_override_font_sizes/font_size = 36
-text = "YOU WIN!"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="RestartLabel" type="Label" parent="HUD" unique_id=1515583369]
-unique_name_in_owner = true
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -150.0
-offset_top = -10.0
-offset_right = 150.0
-offset_bottom = 20.0
-theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 18
-text = "Click to restart"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="MenuLabel" type="Label" parent="HUD"]
-unique_name_in_owner = true
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -150.0
-offset_top = 30.0
-offset_right = 150.0
-offset_bottom = 55.0
-theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 16
-text = "Back to Menu"
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="Obstacle1" type="StaticBody2D" parent="." groups=["obstacle"]]
 collision_layer = 16
 collision_mask = 0
@@ -310,3 +111,225 @@ color = Color(0.6, 0.3, 0.15, 1)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Obstacle3"]
 shape = SubResource("RectangleShape2D_obstacle_23")
+
+[node name="PlayerSpawn" type="Marker2D" parent="." unique_id=373802600]
+unique_name_in_owner = true
+
+[node name="EnemySpawnTL" type="Marker2D" parent="."]
+position = Vector2(-600, -200)
+unique_name_in_owner = true
+
+[node name="EnemySpawnBR" type="Marker2D" parent="."]
+position = Vector2(600, 200)
+unique_name_in_owner = true
+
+[node name="EnemySpawnZone" type="Area2D" parent="."]
+unique_name_in_owner = true
+
+[node name="EdgeTop" type="CollisionShape2D" parent="EnemySpawnZone"]
+position = Vector2(0, -1220)
+shape = SubResource("RectangleShape2D_spawn_h")
+
+[node name="EdgeRight" type="CollisionShape2D" parent="EnemySpawnZone"]
+position = Vector2(1220, 0)
+shape = SubResource("RectangleShape2D_spawn_v")
+
+[node name="EdgeBottom" type="CollisionShape2D" parent="EnemySpawnZone"]
+position = Vector2(0, 1220)
+shape = SubResource("RectangleShape2D_spawn_h")
+
+[node name="EdgeLeft" type="CollisionShape2D" parent="EnemySpawnZone"]
+position = Vector2(-1220, 0)
+shape = SubResource("RectangleShape2D_spawn_v")
+
+[node name="EntityContainer" type="Node2D" parent="." unique_id=1984937077]
+y_sort_enabled = true
+unique_name_in_owner = true
+
+[node name="Players" type="Node2D" parent="EntityContainer" unique_id=1099272114]
+
+[node name="Enemies" type="Node2D" parent="EntityContainer"]
+
+[node name="Pickups" type="Node2D" parent="EntityContainer"]
+
+[node name="Projectiles" type="Node2D" parent="EntityContainer"]
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1125374998]
+script = ExtResource("4_hud_script")
+
+[node name="ThemeRoot" type="Control" parent="HUD"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 1
+theme = ExtResource("10_theme")
+
+[node name="HealthBar" type="ProgressBar" parent="HUD/ThemeRoot" unique_id=1208201283]
+unique_name_in_owner = true
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 220.0
+offset_bottom = 45.0
+theme_override_styles/background = SubResource("StyleBoxFlat_health")
+theme_override_styles/fill = SubResource("StyleBoxFlat_health_fill")
+value = 100.0
+show_percentage = false
+
+[node name="TopRightBar" type="HBoxContainer" parent="HUD/ThemeRoot"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 0.0
+offset_left = -300.0
+offset_right = -8.0
+offset_top = 8.0
+offset_bottom = 48.0
+
+[node name="PingLabel" type="Label" parent="HUD/ThemeRoot/TopRightBar"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.7, 0.85, 0.7, 0.85)
+theme_override_font_sizes/font_size = 18
+horizontal_alignment = 2
+vertical_alignment = 1
+text = ""
+
+[node name="StatsLabel" type="Label" parent="HUD/ThemeRoot" unique_id=1642736728]
+unique_name_in_owner = true
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -200.0
+offset_top = -140.0
+offset_right = 200.0
+offset_bottom = -110.0
+theme_override_colors/font_color = Color(0.9, 0.9, 0.4, 1)
+theme_override_font_sizes/body = 20
+horizontal_alignment = 1
+
+[node name="CountdownLabel" type="Label" parent="HUD/ThemeRoot"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -180.0
+offset_right = 100.0
+offset_bottom = -130.0
+theme_override_colors/font_color = Color(1, 1, 0.3, 1)
+theme_override_font_sizes/countdown = 64
+horizontal_alignment = 1
+
+[node name="WaveLabel" type="Label" parent="HUD/ThemeRoot"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -240.0
+offset_right = 150.0
+offset_bottom = -190.0
+theme_override_colors/font_color = Color(0.2, 0.8, 1.0, 1)
+theme_override_font_sizes/heading = 36
+horizontal_alignment = 1
+
+[node name="ExitButton" parent="HUD/ThemeRoot/TopRightBar" unique_id=1621529152 instance=ExtResource("9_exit")]
+anchors_preset = 0
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+
+[node name="RespawnLabel" type="Label" parent="HUD/ThemeRoot"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = 50.0
+offset_right = 200.0
+offset_bottom = 90.0
+theme_override_colors/font_color = Color(1.0, 0.3, 0.3, 0.6)
+theme_override_font_sizes/font_size = 30
+horizontal_alignment = 1
+
+[node name="GameOverLabel" type="Label" parent="HUD/ThemeRoot" unique_id=1458967569]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -50.0
+offset_right = 100.0
+offset_bottom = -20.0
+theme_override_colors/font_color = Color(0.9, 0.2, 0.2, 1)
+theme_override_font_sizes/heading = 36
+text = "GAME OVER"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WinLabel" type="Label" parent="HUD/ThemeRoot" unique_id=1448005617]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -50.0
+offset_right = 100.0
+offset_bottom = -20.0
+theme_override_colors/font_color = Color(0.2, 0.9, 0.2, 1)
+theme_override_font_sizes/heading = 36
+text = "YOU WIN!"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="RestartLabel" type="Label" parent="HUD/ThemeRoot" unique_id=1515583369]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -10.0
+offset_right = 150.0
+offset_bottom = 20.0
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 18
+text = "Click to restart"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="MenuLabel" type="Label" parent="HUD/ThemeRoot"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = 30.0
+offset_right = 150.0
+offset_bottom = 55.0
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/small = 16
+text = "Back to Menu"
+horizontal_alignment = 1
+vertical_alignment = 1

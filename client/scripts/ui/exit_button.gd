@@ -11,7 +11,7 @@ func _ready() -> void:
 	button_down.connect(_on_button_down)
 	button_up.connect(_on_button_up)
 	set_process(false)
-	text = "X"
+	text = ""
 
 
 func _process(delta: float) -> void:
@@ -43,6 +43,6 @@ func _on_button_up() -> void:
 	_is_holding = false
 	_hold_timer = 0.0
 	set_process(false)
-	text = "X"
+	text = ""
 	modulate = Color.WHITE
 	GameEvents.ui_blocking_input = false

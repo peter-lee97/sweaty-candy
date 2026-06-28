@@ -15,6 +15,7 @@ const SPAWN_BAND_WIDTH: float = 200.0
 const MAX_ENEMIES_PER_WAVE: int = 100
 const INTERPOLATION_DELAY_SEC: float = 0.1
 const SNAPSHOT_BUFFER_SIZE: int = 6
+const GHOST_PROJ_TIMEOUT_MSEC: int = 500
 
 @onready var _player_spawn: Marker2D = %PlayerSpawn
 @onready var _projectiles_container: Node2D = %EntityContainer/Projectiles
@@ -48,6 +49,10 @@ var _snapshot_buffer: Array = []
 var _is_respawning: bool = false
 var _is_spawning: bool = false
 var _game_ended: bool = false
+var _next_local_proj_seq: int = 0
+var _pending_local_proj_seq: int = -1
+var _ghost_projectiles: Dictionary = {}
+var _ghost_birth_times: Dictionary = {}
 
 const _enemy_scene: PackedScene = preload("res://scenes/enemies/enemy_base.tscn")
 const _enemy_fast_scene: PackedScene = preload("res://scenes/enemies/enemy_fast.tscn")
@@ -143,7 +148,6 @@ func _start_wave(wave: int) -> void:
 		await get_tree().create_timer(SPAWN_STAGGER).timeout
 	_is_spawning = false
 	if _wave_enemies_alive <= 0:
-		GameEvents.wave_completed.emit(_current_wave)
 		_current_wave += 1
 		await get_tree().create_timer(WAVE_DELAY).timeout
 		_start_wave(_current_wave)
@@ -277,6 +281,7 @@ func _on_spawn_projectile_requested(pos: Vector2, dir: Vector2) -> void:
 	if _game_ended:
 		return
 	if GameData.multiplayer_session_active:
+		_spawn_ghost_projectile(pos, dir)
 		return
 	var proj: Node = _acquire_proj()
 	if proj == null:
@@ -284,6 +289,34 @@ func _on_spawn_projectile_requested(pos: Vector2, dir: Vector2) -> void:
 	if proj.has_method("activate"):
 		proj.activate(pos, dir)
 	_sp_projectile_nodes.append(proj)
+
+
+func _spawn_ghost_projectile(pos: Vector2, dir: Vector2) -> void:
+	var proj: Node = _acquire_proj()
+	if proj == null:
+		return
+	if proj.has_method("activate"):
+		proj.activate(pos, dir)
+	var seq: int = _next_local_proj_seq
+	_next_local_proj_seq += 1
+	_ghost_projectiles[seq] = proj
+	_ghost_birth_times[seq] = Time.get_ticks_msec()
+	_pending_local_proj_seq = seq
+
+
+func _cleanup_ghost_projectiles() -> void:
+	var now: int = Time.get_ticks_msec()
+	var expired: Array[int] = []
+	for seq: int in _ghost_projectiles.keys():
+		var age: int = now - _ghost_birth_times.get(seq, now)
+		if age >= GHOST_PROJ_TIMEOUT_MSEC:
+			expired.append(seq)
+	for seq: int in expired:
+		var ghost: Node = _ghost_projectiles.get(seq)
+		if ghost:
+			_release_proj(ghost)
+		_ghost_projectiles.erase(seq)
+		_ghost_birth_times.erase(seq)
 
 
 func _on_projectile_expired(proj: Node) -> void:
@@ -321,6 +354,7 @@ func _on_connected_to_server() -> void:
 func _physics_process(delta: float) -> void:
 	if GameData.multiplayer_session_active:
 		_update_interpolated_targets()
+		_cleanup_ghost_projectiles()
 		for node_id in _remote_targets:
 			var node: CharacterBody2D = _remote_player_nodes.get(node_id)
 			if node:
@@ -362,7 +396,9 @@ func _physics_process(delta: float) -> void:
 	_intent_timer += delta
 	if _intent_timer >= 1.0 / INTENT_SEND_HZ:
 		_intent_timer -= 1.0 / INTENT_SEND_HZ
-		NetworkClient.send_player_intent(_network_tick, move_dir, aim_dir, wants_shoot, weapon_cycle)
+		var local_seq: int = _pending_local_proj_seq
+		_pending_local_proj_seq = -1
+		NetworkClient.send_player_intent(_network_tick, move_dir, aim_dir, wants_shoot, weapon_cycle, local_seq)
 
 
 func _apply_snapshot(snapshot: Dictionary) -> void:
@@ -456,6 +492,13 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 	for pid_str in server_projectiles:
 		var pd: Dictionary = server_projectiles[pid_str]
 		existing_proj_ids.append(pid_str)
+		var local_seq: int = pd.get("local_seq", -1)
+		if local_seq >= 0 and _ghost_projectiles.has(local_seq):
+			var ghost: Node = _ghost_projectiles[local_seq]
+			_release_proj(ghost)
+			_ghost_projectiles.erase(local_seq)
+			_ghost_birth_times.erase(local_seq)
+			continue
 		if not _server_projectile_nodes.has(pid_str):
 			var proj: Node = _acquire_proj()
 			if proj:
@@ -621,6 +664,13 @@ func _cleanup_mp_resources() -> void:
 			_release_proj(node)
 	_server_projectile_nodes.clear()
 	_snapshot_buffer.clear()
+	for seq: int in _ghost_projectiles.keys():
+		var ghost: Node = _ghost_projectiles[seq]
+		if is_instance_valid(ghost):
+			_release_proj(ghost)
+	_ghost_projectiles.clear()
+	_ghost_birth_times.clear()
+	_pending_local_proj_seq = -1
 
 	for proj in _projectile_pool:
 		if is_instance_valid(proj):
@@ -688,7 +738,6 @@ func _on_enemy_killed(kill_position: Vector2, _score_value: int) -> void:
 		return
 	_wave_enemies_alive -= 1
 	if _wave_enemies_alive <= 0 and not _is_spawning:
-		GameEvents.wave_completed.emit(_current_wave)
 		_current_wave += 1
 		await get_tree().create_timer(WAVE_DELAY).timeout
 		_start_wave(_current_wave)

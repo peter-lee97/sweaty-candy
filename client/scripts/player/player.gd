@@ -32,8 +32,6 @@ func _physics_process(delta: float) -> void:
 
 
 func _shoot() -> void:
-	if GameData.multiplayer_session_active:
-		return
 	GameEvents.spawn_projectile_requested.emit(global_position, _aim_direction)
 	GameEvents.projectile_fired.emit()
 

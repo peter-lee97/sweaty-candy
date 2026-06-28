@@ -10,7 +10,7 @@ collision_layer = 2
 collision_mask = 17
 script = ExtResource("1_script")
 hp = 25
-move_speed = 250
+move_speed = 160
 contact_damage = 8
 score_value = 150
 

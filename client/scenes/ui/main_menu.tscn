@@ -1,6 +1,7 @@
-[gd_scene load_steps=1 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1_script"]
+[ext_resource type="Theme" path="res://resources/ui/default_theme.tres" id="2_theme"]
 
 [node name="MainMenu" type="Control"]
 anchors_preset = 15
@@ -8,6 +9,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme = ExtResource("2_theme")
 script = ExtResource("1_script")
 
 [node name="Background" type="ColorRect" parent="."]
@@ -22,37 +24,37 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -150.0
-offset_top = -120.0
-offset_right = 150.0
-offset_bottom = 120.0
-theme_override_constants/separation = 16
+offset_left = -350.0
+offset_top = -240.0
+offset_right = 350.0
+offset_bottom = 240.0
+theme_override_constants/separation = 32
 
 [node name="Title" type="Label" parent="VBoxContainer"]
 text = "SWEATY CANDY"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 42
+theme_override_font_sizes/hero = 84
 theme_override_colors/font_color = Color(0.9, 0.4, 0.2, 1.0)
 
 [node name="Subtitle" type="Label" parent="VBoxContainer"]
 text = "A top-down horde shooter"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/heading = 36
 theme_override_colors/font_color = Color(0.5, 0.5, 0.6, 1.0)
 
 [node name="Spacer" type="Control" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 60)
 
 [node name="SingleplayerButton" type="Button" parent="VBoxContainer"]
 text = "SINGLE PLAYER"
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/hero = 52
 
 [node name="Spacer2" type="Control" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 16)
+custom_minimum_size = Vector2(0, 24)
 
 [node name="MultiplayerButton" type="Button" parent="VBoxContainer"]
 text = "MULTIPLAYER"
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/hero = 52
 
 [node name="StatusLabel" type="Label" parent="."]
 unique_name_in_owner = true
@@ -61,13 +63,14 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -200.0
-offset_top = -40.0
-offset_right = 200.0
+offset_left = -300.0
+offset_top = -60.0
+offset_right = 300.0
 offset_bottom = -20.0
 text = ""
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1.0)
+theme_override_font_sizes/font_size = 32
 
 [connection signal="pressed" from="VBoxContainer/SingleplayerButton" to="." method="_on_singleplayer_pressed"]
 [connection signal="pressed" from="VBoxContainer/MultiplayerButton" to="." method="_on_multiplayer_pressed"]
