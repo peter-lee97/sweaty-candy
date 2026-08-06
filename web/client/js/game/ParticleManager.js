@@ -4,7 +4,7 @@ export class ParticleManager {
   constructor(scene) {
     this.scene = scene;
     this.particles = [];
-    this.g = scene.add.graphics().setDepth(9500);
+    this.g = scene.add.graphics().setDepth(9500).setScrollFactor(1);
   }
 
   burst(pos, color, count, speed) {

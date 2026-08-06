@@ -145,17 +145,17 @@ export class EntityManager {
   }
 
   createPlayerObj() {
-    const c = this.scene.add.container(0, 0);
+    const c = this.scene.add.container(0, 0).setScrollFactor(1);
     const g = this.scene.add.graphics();
-    const name = this.scene.add.text(0, 0, '', { fontFamily: 'sans-serif', fontSize: '13px' }).setOrigin(0.5);
-    const hp = this.scene.add.graphics();
+    const name = this.scene.add.text(0, 0, '', { fontFamily: 'sans-serif', fontSize: '13px' }).setOrigin(0.5).setScrollFactor(1);
+    const hp = this.scene.add.graphics().setScrollFactor(1);
     c.add([g, name, hp]);
     c.g = g; c.name = name; c.hp = hp;
     return c;
   }
 
   createEnemyObj() {
-    const c = this.scene.add.container(0, 0);
+    const c = this.scene.add.container(0, 0).setScrollFactor(1);
     const g = this.scene.add.graphics();
     c.add(g);
     c.g = g;
@@ -163,7 +163,7 @@ export class EntityManager {
   }
 
   createProjectileObj() {
-    const c = this.scene.add.container(0, 0);
+    const c = this.scene.add.container(0, 0).setScrollFactor(1);
     const g = this.scene.add.graphics();
     g.fillStyle(PROJECTILE_COLOR, 1);
     diamond(g, 0, 0, 5);
@@ -173,7 +173,7 @@ export class EntityManager {
   }
 
   createPickupObj() {
-    const c = this.scene.add.container(0, 0);
+    const c = this.scene.add.container(0, 0).setScrollFactor(1);
     const g = this.scene.add.graphics();
     c.add(g);
     c.g = g;

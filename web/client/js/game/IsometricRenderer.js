@@ -26,7 +26,7 @@ export class IsometricRenderer {
       this.worldToScreen(half, half),
       this.worldToScreen(-half, half)
     ];
-    const g = this.scene.add.graphics();
+    const g = this.scene.add.graphics().setScrollFactor(1);
     g.fillStyle(0x1c1c24, 1);
     g.beginPath();
     g.moveTo(corners[0].x, corners[0].y);
@@ -40,7 +40,7 @@ export class IsometricRenderer {
 
   drawGrid() {
     const half = MAP.halfSize;
-    const g = this.scene.add.graphics();
+    const g = this.scene.add.graphics().setScrollFactor(1);
     g.lineStyle(1, 0xffffff, 0.04);
     for (let gr = -half; gr <= half; gr += 200) {
       const a = this.worldToScreen(gr, -half);
@@ -61,7 +61,7 @@ export class IsometricRenderer {
 
   drawObstacle(box) {
     const scene = this.scene;
-    const g = scene.add.graphics();
+    const g = scene.add.graphics().setScrollFactor(1);
     const { x, y, w, h } = box;
     const hw = w / 2;
     const hh = h / 2;
