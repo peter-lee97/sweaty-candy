@@ -61,6 +61,12 @@
       "skillPath": "skills/godot-tilemap-mastery/SKILL.md",
       "computedHash": "17612ca6727018e6ad162077538c4d01c3707fafd99f192c7481f9a466ebb065"
     },
+    "godot-tweening": {
+      "source": "thedivergentai/gd-agentic-skills",
+      "sourceType": "github",
+      "skillPath": "skills/godot-tweening/SKILL.md",
+      "computedHash": "bfbf4c4e51bc05281aaa18e8cbc2be563a0366d9d512d458a1a917d2ca24be1f"
+    },
     "godot-ui-containers": {
       "source": "thedivergentai/gd-agentic-skills",
       "sourceType": "github",

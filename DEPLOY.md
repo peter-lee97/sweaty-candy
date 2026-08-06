@@ -6,24 +6,27 @@
 ┌── VPS (bare metal) ─────────────────────────────────────────────────┐
 │                                                                     │
 │  Caddy (port 80/443, systemd)                                       │
-│    shoot.compilechicken.com                                         │
-│      /            → /opt/sweaty-candy/client-export (static)        │
-│      /v1/*        → localhost:8787 (backend API + WS)               │
-│    game.compilechicken.com                                          │
+│    shoot.compilechicken.com                                          │
+│      /            → localhost:8787 (backend: client + /shared + API)│
+│    game.compilechicken.com                                           │
 │      /            → localhost:7777 (game server WebSocket via TLS)  │
 │                                                                     │
 │  sweaty-candy-backend (Node.js, systemd)                            │
-│    port 8787 — auth, lobbies, server registry                      │
+│    port 8787 — serves web/client + shared/, auth, lobbies, registry │
 │                                                                     │
-│  sweaty-candy-server (Godot headless, systemd)                      │
+│  sweaty-candy-server (Node.js game server, systemd)                 │
 │    port 7777 — game server WebSocket (proxied through Caddy)        │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+The backend is a single origin that serves the static client (`web/client/`), the shared
+module (`shared/game.js`), and the REST/WS API. No separate static file host or build step.
+
 ## Prerequisites
 
 - VPS with Debian 12+
+- Node.js 22+ (via nvm)
 - Domain name (e.g. `shoot.compilechicken.com`)
 - DNS A records for `shoot` and `game` pointing to VPS IP
 
@@ -64,15 +67,7 @@ import /etc/caddy/sites-enabled/*
 
 ```
 shoot.compilechicken.com {
-    root * /opt/sweaty-candy/client-export
-    file_server
-
-    handle /v1/lobbies/events {
-        reverse_proxy localhost:8787
-    }
-    handle /v1/* {
-        reverse_proxy localhost:8787
-    }
+    reverse_proxy localhost:8787
 }
 
 game.compilechicken.com {
@@ -80,7 +75,10 @@ game.compilechicken.com {
 }
 ```
 
-The `game.compilechicken.com` subdomain provides TLS-terminated WebSocket access to the game server. Caddy auto-provisions a Let's Encrypt cert and transparently proxies WebSocket connections to Godot's `WebSocketMultiplayerPeer`.
+`shoot.compilechicken.com` proxies the whole backend, which serves the client, the shared
+module, and the `/v1/*` API on one origin. `game.compilechicken.com` provides TLS-terminated
+WebSocket access to the Node.js game server. Caddy auto-provisions Let's Encrypt certs and
+transparently upgrades/proxies WebSocket connections.
 
 ### Media converter site config (`/etc/caddy/sites-enabled/mc.caddy`)
 
@@ -95,7 +93,7 @@ mc.compilechicken.com, www.mc.compilechicken.com {
 }
 ```
 
-## Node.js (Backend)
+## Node.js
 
 ### Install via nvm
 
@@ -106,78 +104,61 @@ export NVM_DIR="$HOME/.nvm"
 nvm install 22
 ```
 
-### Backend files
+### App files
 
-Place `backend/` at `/opt/sweaty-candy/backend/` and install dependencies:
+Place the repo at `/opt/sweaty-candy/` and install dependencies:
 
 ```bash
 cd /opt/sweaty-candy/backend
 npm install
+cd /opt/sweaty-candy/gameserver
+npm install
 ```
+
+The backend serves `web/client/` and `shared/` relative to its own module path, so the repo
+layout must be preserved (do not copy only the `backend/` folder).
 
 ## Local Development & Testing
 
 ### Prerequisites
 
-- Godot 4.6.3+ installed locally
-- Node.js installed locally
-- Caddy installed locally: `brew install caddy` (macOS) or `sudo apt install caddy` (Linux)
+- Node.js 22+ installed locally
+- No build step, no Godot, no Caddy required for local dev
 
 ### Start all services locally
 
 ```bash
-# Terminal 1: Backend
-cd backend && node src/app.js
-
-# Terminal 2: Game server
-godot --headless --path server/ -- --backend-base-url http://localhost:8787 --advertised-host 127.0.0.1 --advertised-port 7777 --listen-port 7777
-
-# Terminal 3: Caddy proxy (serves client + proxies /v1/* to backend)
-caddy run --config tools/Caddyfile.local
+./dev.sh
 ```
 
-### Export client (HTML5/WebAssembly)
-
-```bash
-godot --headless --path client/ --export-release "Web" --quit
-```
-
-Output: `client/index.html`, `client/index.js`, `client/index.wasm`, `client/index.pck`, etc.
+Starts the backend (8787) + game server (7777). Open `http://127.0.0.1:8787`.
 
 ### Test multiplayer locally
 
-1. Open `http://localhost:8080` in two browser tabs
-2. Tab 1: Create a lobby → Start Game → you're Player 1
-3. Tab 2: Join the lobby → Start Game → you should see Player 1 (blue tint)
+1. Open `http://127.0.0.1:8787` in one tab and `http://localhost:8787` in another
+   (different origins = isolated localStorage identities).
+2. Tab 1: Create a lobby → Start Game.
+3. Tab 2: Join the lobby → both players should see each other in-game.
 
 ### Stop all services
 
 ```bash
-pkill -f "godot.*--path.*server"
-pkill -f "node.*app.js"
-pkill -f "caddy run"
+pkill -f "node src/app.js"
+pkill -f "node src/server.js"
 ```
 
 ## Production Deploy
 
 ### Prerequisites
 
-- Godot 4.6.3+ installed locally
-- Export templates for Web and Linux installed
+- Node.js 22+ installed on the server
 - SSH access to production server
+- Repo rsync'd to `/opt/sweaty-candy/` (layout preserved)
 
-### Export and upload client
-
-```bash
-godot --headless --path client/ --export-release "Web" --quit
-rsync -avz -e "ssh -i ~/.ssh/id_ed25519" client/index.* dev@mc.prod:/opt/sweaty-candy/client-export/
-```
-
-### Export and upload server PCK
+### Upload client + server
 
 ```bash
-godot --headless --path server/ --export-pack "Linux" server/build/sweaty-server.pck --quit
-scp -i ~/.ssh/id_ed25519 server/build/sweaty-server.pck dev@mc.prod:/opt/sweaty-candy/server/sweaty-server.pck
+rsync -avz -e "ssh -i ~/.ssh/id_ed25519" --exclude node_modules --exclude data ./ dev@mc.prod:/opt/sweaty-candy/
 ```
 
 ### Restart game server on production
@@ -229,16 +210,20 @@ After=network.target sweaty-candy-backend.service
 [Service]
 Type=simple
 User=dev
-WorkingDirectory=/opt/sweaty-candy/server
-ExecStart=/opt/sweaty-candy/server/sweaty-server --headless -- --backend-base-url http://localhost:8787 --advertised-host game.compilechicken.com --advertised-port 443 --listen-port 7777
+WorkingDirectory=/opt/sweaty-candy/gameserver
+Environment=BACKEND_BASE_URL=http://localhost:8787
+Environment=ADVERTISED_HOST=game.compilechicken.com
+Environment=ADVERTISED_PORT=443
+Environment=LISTEN_PORT=7777
+Environment=MAX_PLAYERS=4
+Environment=HOME=/home/dev
+ExecStart=/home/dev/.nvm/versions/node/v22.23.0/bin/node src/server.js
 Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 ```
-
-The `--advertised-host` and `--advertised-port` tell clients to connect via `wss://game.compilechicken.com:443` (TLS-secured WebSocket through Caddy). The `--listen-port` stays on 7777 for local proxy.
 
 ### Enable services
 
@@ -247,25 +232,22 @@ sudo systemctl daemon-reload
 sudo systemctl enable sweaty-candy-backend sweaty-candy-server --now
 ```
 
-## Server CLI Arguments
+## Game Server Environment Variables
 
-The game server supports these CLI arguments (passed after `--` separator):
-
-| Argument | Default | Description |
+| Variable | Default | Description |
 |----------|---------|-------------|
-| `--listen-port` | `7777` | WebSocket server listen port (local, behind Caddy proxy) |
-| `--advertised-host` | `127.0.0.1` | Host sent to backend for clients to connect to (use `game.compilechicken.com` for production) |
-| `--advertised-port` | `0` (uses listen_port) | Port sent to backend (use `443` for Caddy proxy with TLS) |
-| `--backend-base-url` | `http://127.0.0.1:8787` | Backend API URL for registration |
-| `--max-players` | `4` | Max connected players |
-
-> Godot requires the `--` separator to distinguish engine args from user args.
+| `BACKEND_BASE_URL` | `http://127.0.0.1:8787` | Backend API URL for registration |
+| `ADVERTISED_HOST` | `127.0.0.1` | Host sent to backend for clients to connect to (use `game.compilechicken.com` for production) |
+| `ADVERTISED_PORT` | `LISTEN_PORT` | Port sent to backend (use `443` for Caddy proxy with TLS) |
+| `LISTEN_PORT` | `7777` | WebSocket server listen port (local, behind Caddy proxy) |
+| `LISTEN_HOST` | `0.0.0.0` | WebSocket bind host |
+| `MAX_PLAYERS` | `4` | Max connected players |
 
 ## Client URL Detection
 
-When running in a browser, the client auto-detects the backend URL from `window.location.origin`. In the Godot editor, it falls back to `http://127.0.0.1:8787`.
-
-The game server WebSocket URL uses `wss://` when the port is 443, otherwise `ws://`.
+When running in a browser, the client uses `window.location.origin` for the backend API and
+lobby events WS. The game server WebSocket URL comes from the lobby's assigned server
+(`serverHost`/`serverPort`) and uses `wss://` when the port is 443, otherwise `ws://`.
 
 ## Verification Checklist
 
@@ -274,7 +256,7 @@ The game server WebSocket URL uses `wss://` when the port is 443, otherwise `ws:
 - [ ] Caddy running: `systemctl status caddy`
 - [ ] Backend healthy: `curl http://localhost:8787/health`
 - [ ] Game server registered: `curl http://localhost:8787/v1/servers` shows host `game.compilechicken.com` and port `443`
-- [ ] Game site accessible: `curl -I https://shoot.compilechicken.com`
+- [ ] Client served: `curl -I https://shoot.compilechicken.com` returns HTML and `curl -I https://shoot.compilechicken.com/shared/game.js` returns JS
 - [ ] Game WebSocket via TLS: WebSocket handshake to `wss://game.compilechicken.com` returns `101 Switching Protocols`
 - [ ] Multiplayer test: two browser tabs at `https://shoot.compilechicken.com` can see each other in-game
 

@@ -1,25 +1,33 @@
 # AGENTS.md — Sweaty Candy
 
-Boxhead-inspired top-down 2D arcade horde shooter. Godot 4 (GDScript), Camera2D following player, pixel art sprites. Pixel-perfect rendering. Single-player first, 4-player co-op multiplayer later.
+Boxhead-inspired isometric multiplayer horde shooter, rewritten as a web app (HTML/JS + Phaser 4.2.1, no Godot).
+Authoritative game server in Node.js.
+Game logic is 2D top-down; only rendering is isometric (2:1 diamond projection).
+Shapes and colors identify entities instead of sprites.
+Desktop uses mouse + keyboard; mobile web uses virtual twin-sticks.
 
 ## Architecture
 
-Three components (Phase 3 scaffolding + Phase 4 backend scaffold started):
+Four components:
 
-- **`client/`** — Godot 4 project. Currently single-player, will export to HTML5/WebAssembly later.
-- **`server/`** — Godot 4 headless server build. Authoritative multiplayer host (Phase 3).
-- **`backend/`** — Standalone server for auth, matchmaking, persistence (Phase 4). Node.js with SQLite.
+- **`web/client/`** — Browser client. Vanilla JS ES modules + Phaser 4.2.1 (WebGL), no build step.
+- **`gameserver/`** — Node.js authoritative game server (`ws`). Replaces the old Godot headless server.
+- **`backend/`** — Node.js auth, lobby, and server registry (reused from the Godot era). Serves the client statically.
+- **`shared/game.js`** — Single source of truth for gameplay constants, map, obstacles, and pure helpers. Imported by both the browser client (`/shared/game.js`) and the game server (`../../shared/game.js`).
 
-Key rule: **clients are never authoritative**. Code is structured so input → intent → state change, making the multiplayer retrofit clean.
+Key rule: **clients are never authoritative**. Input → intent → server validates → state change.
+Input never directly mutates position/health on the network path.
 
 ## Authentication
 
-Guest-first auth flow. Users land on main menu and can play immediately as guest.
+Credential-less guest-first auth. Users land on main menu and can play immediately.
 
-- **Guest users**: Full functionality (including private lobbies). 2-hour configurable session (`GUEST_SESSION_DURATION_MS` env var, default 7200000ms). Random username (`fruit+color+number`). Session stored in `user://config/auth.cfg` via `ConfigFile`. Auto-refresh 5 mins before expiry (throttled to 60s intervals). Collision check against both `store.users` and active `guestSessions`.
-- **Account users**: Custom username, persistent password-based accounts. No session expiry.
-- **Logout**: Clear auth, free username, return to main menu with fresh guest profile.
-- **No token refresh for account users** — only guest sessions can be refreshed.
+- No passwords. Optional display name (3-20 chars: letters, numbers, space, underscore); auto-generated `fruit+color+number` if skipped.
+- Guest session: 2-hour configurable lifetime (`GUEST_SESSION_DURATION_MS` env var, default 7200000ms). Stored in `localStorage` under key `sweaty.auth.v1` (`{ userId, username, token }`).
+- Username collision check against both `store.users` and active `guestSessions`.
+- The menu pre-fills the current identity. The name field only applies when no valid token exists (re-validate via `GET /v1/auth/me` first).
+- Guest sessions can be refreshed via `POST /v1/auth/refresh` (client does not currently auto-refresh).
+- Logout: not yet implemented in the UI. Clearing `sweaty.auth.v1` from localStorage logs out.
 
 ### Auth Endpoints
 
@@ -27,7 +35,7 @@ Guest-first auth flow. Users land on main menu and can play immediately as guest
 |---|---|---|---|
 | POST | `/v1/auth/register` | No | Create account with custom username + password (min 6 chars) |
 | POST | `/v1/auth/login` | No | Login with username + password |
-| POST | `/v1/auth/guest` | No | Create guest session with random username |
+| POST | `/v1/auth/guest` | No | Create guest session; optional `username` field (credential-less) |
 | POST | `/v1/auth/refresh` | Yes | Extend guest session (only for guests) |
 | GET | `/v1/auth/me` | Yes | Get current user info |
 
@@ -43,132 +51,106 @@ Guest-first auth flow. Users land on main menu and can play immediately as guest
 }
 ```
 
-### Client Auth Storage (`user://config/auth.cfg`)
-
-```ini
-[authentication]
-user_id=guest_1717689600123_a3f2
-username=appleblue123
-user_type=guest
-token=abc123xyz
-created_at=1717689600000
-backend_url=http://127.0.0.1:8787
-```
+Backend persists state in SQLite at `backend/data/store.db` (see `backend/src/store.js`).
 
 ## Project Layout
 
 ```
-client/
-  project.godot              Godot 4.3, GL Compatibility renderer
-  scenes/
-    game/        game.tscn (root), arena.tscn
-    player/      player.tscn
-    enemies/     enemy_base.tscn, enemy_fast.tscn, enemy_tank.tscn
-    projectiles/ projectile.tscn, projectile_lobber.tscn, projectile_sprayer.tscn, projectile_freezer.tscn
-    weapons/     weapon_blaster.tscn, weapon_lobber.tscn, weapon_sprayer.tscn, weapon_freezer.tscn
-    pickups/     health_pickup.tscn
-    ui/          main_menu.tscn, hud.tscn, game_over.tscn, multiplayer_auth.tscn, lobby.tscn, waiting_room.tscn
-  scripts/
-    game/        game_manager.gd, entity_manager.gd, wave_manager.gd, score_manager.gd
-    player/      player.gd, camera_follow.gd
-    enemies/     enemy_base.gd, enemy_fast.gd, enemy_tank.gd
-    weapons/     weapon.gd (base class), weapon_blaster.gd, weapon_lobber.gd, weapon_sprayer.gd, weapon_freezer.gd
-    projectiles/ projectile.gd, projectile_lobber.gd, projectile_sprayer.gd, projectile_freezer.gd
-    components/  health_component.gd, hitbox_component.gd, hit_flash_component.gd
-    effects/     death_particles.gd
-    pickups/     health_pickup.gd, weapon_pickup.gd
-    ui/          hud.gd, main_menu.gd, game_over.gd, multiplayer_auth.gd, lobby.gd, waiting_room.gd
-    autoload/    game_events.gd (signals), game_data.gd (cross-scene state), backend_api.gd (HTTP + WebSocket client)
-  assets/        sprites/, audio/, fonts/, tilesets/ (placeholder — add real assets)
-  resources/     wave_data/, weapon_data/ (for .tres configs later)
+shared/
+  game.js                # CONFIG, ENEMY_TYPES, MAP, wave/difficulty formulas, collision helpers
 
-server/
-  scripts/
-    server_main.gd           Authoritative game server with wave system + enemy AI
+web/client/
+  index.html             # Single page: screens + canvas + HUD + touch sticks
+  css/style.css
+  js/
+    main.js              # Boot, auth state, screen routing, lobby WS wiring
+    auth.js              # localStorage token helpers
+    api.js               # REST + lobby events WebSocket client
+    screens/
+      manager.js         # setScreen(app, name) toggles menu/lobby/waiting + tracks app.screen
+      menu.js, lobby.js, waiting.js
+    game/
+      GameScene.js         # Phaser scene orchestration: game loop, prediction, interpolation, FX
+      net.js               # Game WS: intents out, snapshots in, prediction history, RTT
+      InputManager.js      # WASD/mouse + touch twin-sticks
+      IsometricRenderer.js # Phaser-based isometric renderer (2:1 diamond projection)
+      EntityManager.js     # Entity state management (players, enemies, projectiles, pickups)
+      ParticleManager.js   # Visual effects (hit flash, death particles, FX)
+      hud.js               # Health bar, banner, ping, player list, game-over overlay
+
+gameserver/
+  package.json
+  src/
+    server.js            # ws endpoint, backend registration + heartbeat, lobby validation
+    sim.js               # 60Hz simulation + snapshot building (full/delta)
 
 backend/
   src/
-    app.js                   Express-like HTTP server with WebSocket support
-    auth.js                  Password hashing, token generation, guest ID/username generation
-    store.js                 SQLite-backed key-value store
-  package.json               Node.js dependencies (ws)
+    app.js               # HTTP server: API + static file serving (web/client + shared/)
+    auth.js              # Password hashing, token generation, guest ID/username generation
+    store.js             # SQLite-backed key-value store
+  package.json
+
+client/  server/          # Legacy Godot projects, kept for reference only (no longer run)
+tools/Caddyfile.local     # Optional local HTTPS/proxy config
+dev.sh                    # Starts backend + game server
 ```
 
-## Game Scene Tree
+## Phaser Setup
 
-```
-Game (Node2D) [game_manager.gd]
-├── Camera2D [camera_follow.gd] — top-down, smooth follow
-├── Arena (StaticBody2D) — 2800×2800 ground + walls
-├── EntityManager (Node2D)
-│   ├── Players/
-│   ├── Enemies/
-│   ├── Projectiles/
-│   └── Pickups/
-├── WaveManager — wave configs, spawns enemies at arena edges
-├── ScoreManager — score + combo system
-└── HUD (CanvasLayer) — health bar, score, wave, combo, weapon, pause/exit buttons
-```
+The client uses Phaser 4.2.1 via CDN with an importmap for ES module loading:
 
-## Collision Layers
+- `index.html` contains importmap pointing to `https://cdn.jsdelivr.net/npm/phaser@4.2.1/dist/phaser.esm.js`
+- `js/loader.js` pre-loads Phaser and exposes it as `window.Phaser`
+- `js/main.js` imports Phaser from window and creates the Phaser game instance
+- Game lifecycle managed through Phaser scenes (GameScene)
+- The Phaser game renders into `#game-container` div, replacing the old Canvas element
 
-| Layer | Value | Used by |
-|---|---|---|
-| 1 Player | 1 | Player CharacterBody2D |
-| 2 Enemy | 2 | Enemy CharacterBody2D, enemy hitbox Area2D |
-| 3 Projectile | 4 | Projectile Area2D (detects enemies + world) |
-| 4 Pickup | 8 | Pickup Area2D (detects player) |
-| 5 World | 16 | Ground, walls (StaticBody2D) |
+## Client Screens
 
-**Key interactions:**
-- Player mask = 18 (enemies + world). Player collides with enemies and walls.
-- Enemy mask = 17 (player + world). Enemies don't collide with each other.
-- Projectile mask = 18 (enemies + world). Projectiles detect and damage enemies, despawn on walls.
-- Enemy hitbox mask = 1 (player). Deals contact damage with a cooldown.
+Menu → (auth) → Main Lobby → Waiting Room → Game → Game Over → back to Lobby.
 
-## Autoloads
+- Menu: optional display name + Play.
+- Main Lobby: live room table via WS events, Create Room modal (name, optional password, max players), Refresh, Back.
+- Waiting Room: player list with owner tag, Start (owner only), Leave. Live-updates via WS; auto-starts the game when the lobby flips to Started.
+- Game Over: survived levels + shots fired, Back to Lobby.
 
-- **GameEvents** — thin signal bus for cross-system events (`enemy_killed`, `score_updated`, `wave_started`, `player_health_changed`, `player_died`, `weapon_changed`, `pause_state_changed`, `pause_toggle_requested`, `exit_to_menu_requested`, `guest_session_expired`). No logic, just signals.
-- **GameData** — persists data across scene changes (`last_score`, `last_wave`, `multiplayer_lobby_id`, `multiplayer_lobby_name`, `multiplayer_owner_user_id`, `multiplayer_server_url`, `multiplayer_session_active`, `user_type`).
-- **BackendApi** — HTTP client + WebSocket for lobby events. Handles auth, guest sessions, token refresh, lobby CRUD. Signal bus: `lobby_events_updated`, `lobby_events_connection_changed`, `guest_session_expired`.
+## Rendering (Isometric)
 
-## Godot Conventions
-
-- **Engine version**: Godot 4.3+ (use `@export`, `await`, `physical_keycode`).
-- **Rendering**: GL Compatibility (required for web export).
-- **Scene structure**: feature subfolders under `scenes/` and `scripts/`.
-- **Node access**: use `%` unique names for frequently accessed children (HealthComponent, WeaponAnchor, Camera2D, etc.). Avoid deep `get_node()` chains.
-- **Signals**: past-tense verbs (`health_changed`, `died`, `enemy_killed`).
-- **Components**: reusable nodes attached as children (HealthComponent, HitboxComponent, HitFlashComponent).
-- **Multiplayer-ready patterns**: input never directly mutates state. Input → intent → authority validates → state change. All spawning goes through EntityManager.
-- **No comments in code** unless explicitly requested.
+- Projection: `screenX = (x - y) * H`, `screenY = (x + y) * V` with `H = 1.0`, `V = 0.5` (2:1 diamond). Game logic stays 2D.
+- Painter's algorithm: drawables sorted by `x + y`. Obstacles drawn as extruded cubes (top face + two side faces).
+- Camera follows local player with lerp; mouse wheel zooms (0.25x - 1.6x).
+- Entity shapes/colors:
+  - Local player: blue circle with white dot + aim tick. Remote players: light-blue circle.
+  - Base enemy: red rotated square. Fast enemy: orange triangle (points at target). Tank enemy: purple hexagon.
+  - Projectiles: yellow diamonds. Ghost projectiles identical until matched.
+  - Health pickups: pulsing green cross.
+  - Obstacles: brown cubes. Arena floor: dark diamond + subtle grid.
+- Hit flash: white overlay 0.1s. Death/hit particles: expanding fading circles.
+- Enemies have HP bars when damaged; player has name label.
+- Rendering is handled by Phaser 4.2.1 WebGL engine with custom isometric projection in GameScene and IsometricRenderer.
 
 ## Gameplay Systems
 
-- **Player**: WASD movement on XY plane, aim direction = last movement direction. Hold left-click to auto-fire. E/Q cycles weapons.
-- **Weapons**: 4 categories, all extend base `Weapon` class via `@export` properties:
-  - **Blaster** — single shot, 4/s, 25 dmg, infinite ammo
-  - **Lobber** — splash damage, 1.5/s, 40 dmg, 150-unit AoE explosion on impact
-  - **Sprayer** — rapid fire, 12/s, 8 dmg, slight spread
-  - **Freezer** — crowd control, 3/s, 10 dmg, slows enemies 50% for 2s
-- **Enemies**: chase nearest player, deal contact damage via HitboxComponent. Knockback on hit. Three variants:
-  - **Base** (red) — 50 HP, speed 125.0, 10 dmg, 100 pts
-  - **Fast** (orange) — 25 HP, speed 250.0, 8 dmg, 150 pts (wave 3+)
-  - **Tank** (purple) — 150 HP, speed 70.0, 20 dmg, 200 pts (wave 5+)
-- **Slow mechanic**: `apply_slow(multiplier, duration)` on enemy_base. `_speed_multiplier` multiplies move_speed. Decays automatically.
-- **Pickups**: health pickups drop from killed enemies (15% chance). Restores 25 HP.
-- **Waves**: data-driven configs (5 waves defined, scales after). Mixed enemy types from wave 3+. 3s cooldown between waves.
-- **Score**: base points × combo multiplier (x1→x4). Combo increments on kills within 2s, resets after timeout.
-- **Camera**: Camera2D with smooth follow and zoom level (2.0, 2.0).
-- **Juice**: hit flash on enemy damage (white flash 0.1s), death particles (expanding circles).
+- **Player**: WASD/arrows movement. The player faces the direction they move; projectiles fire in the facing direction. Hold left-click to fire (desktop). Twin-stick: left = move, right = fire (mobile). Move speed 300, max health 100.
+- **Weapon**: single blaster. 2.5 shots/s (0.4s cooldown), 25 dmg, 500 u/s projectile, infinite ammo, 18-unit hit radius.
+- **Enemies** (chase nearest living player, contact damage, knockback on hit):
+  - **Base** (red square) — 50 HP, speed 125, 10 dmg
+  - **Fast** (orange triangle) — 25 HP, speed 250, 8 dmg (wave 3+)
+  - **Tank** (purple hexagon) — 150 HP, speed 70, 20 dmg (wave 5+)
+  - Difficulty scaling: HP +5%/level, speed +1.5%/level (capped at 1.5x).
+- **Levels = waves**: enemy count scales with level (5 → 6 → 8 → 8 + floor((level-7)/2)), multiplied by `1 + (players-1) * 0.5`, capped at 100. 5s start countdown, 0.35s spawn stagger, 3s between levels. Wave 3+ mixes fast, wave 5+ mixes tank (round-robin composition).
+- **Pickups**: 15% drop chance on kill, +25 HP, 10s lifetime.
+- **Respawn** (multiplayer only): `clamp(5 + (level-1) * 0.5, 5, 10)` seconds. Game over when all players are dead.
+- **Map**: 2800×2800 arena, 7 obstacles (3 bar walls + 4 corner blocks), defined in `shared/game.js`. Obstacles block players, projectiles, and enemy contact.
 
 ## Multiplayer Systems
 
 ### Lobby Flow
-1. Main Menu → Multiplayer → Auth Screen (or auto-login guest)
-2. Auth Screen → Register/Login/Continue as Guest → Lobby
-3. Lobby → Create Room / Join Room → Waiting Room
-4. Waiting Room → Start Game → Connect to Game Server
+
+1. Main Menu → Play (guest auth) → Main Lobby
+2. Main Lobby → Create Room / Join Room → Waiting Room
+3. Waiting Room → Start (owner) → auto-connect to Game Server
 
 ### Lobby Endpoints
 
@@ -181,46 +163,87 @@ Game (Node2D) [game_manager.gd]
 | POST | `/v1/lobbies/:id/start` | Yes | Start lobby (owner only, assigns game server) |
 | WS | `/v1/lobbies/events?token=...` | Yes | Real-time lobby updates |
 
+Lobby payloads include `players: [{ id, username }]` (used by the waiting room).
+
 ### Server Registration
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | POST | `/v1/servers/register` | No | Register game server |
-| POST | `/v1/servers/:id/heartbeat` | No | Server heartbeat (60s TTL) |
+| POST | `/v1/servers/:id/heartbeat` | No | Server heartbeat (10s interval, 60s TTL) |
 | GET | `/v1/servers` | No | List active servers |
 
-### Game Server
-- Authoritative simulation with player input processing
-- Wave system with enemy spawning at arena edges
-- Enemy AI: chase nearest player, bounded by arena
-- Snapshot broadcasting at configurable rate (default 20Hz)
-- Network enemy synchronization on client side
+### Game Server (`gameserver/`)
+
+- Authoritative simulation on a fixed 60Hz timestep (`setInterval`, one `sim.step(1/60)` per tick).
+- One game per server instance: first connecting lobby claims the server; other lobbies are rejected with a kick.
+- Per-player intent queue (cap 16, drops oldest); hold-last idle policy; 120 intents/s rate limit.
+- Clients validated via backend `GET /v1/auth/me` + lobby must be `Started` and assigned to this server id.
+- Snapshots: 30Hz default, adaptive 20/15Hz for RTT > 100/200ms. Full sync every 1s; otherwise delta sync (changed entities + removed lists).
+- Payloads are JSON. Snapshot shape:
+
+```json
+{
+  "type": "snapshot",
+  "serverTick": int, "wave": int, "phase": "countdown|spawning|active|intermission",
+  "phaseTimer": float, "gameOver": bool, "full": bool,
+  "players": { "id": { "position": [x,y], "aim": [x,y], "health": int, "alive": bool, "respawnTimer": float, "lastInputTick": int } },
+  "enemies": { "id": { "position": [x,y], "type": "base|fast|tank", "hp": int, "maxHp": int } },
+  "projectiles": { "id": { "position": [x,y], "direction": [x,y], "localSeq": int } },
+  "pickups": { "id": { "position": [x,y] } },
+  "removedPlayers": [], "removedEnemies": [], "removedProjectiles": [], "removedPickups": [],
+  "usernames": { "id": "name" }
+}
+```
+
+### Client Networking
+
+- Local player: prediction + reconciliation. Prediction history keyed by input tick (cap 60). Error blended over 120ms; hard snap beyond 60px.
+- Remote entities: snapshot buffer (cap 12) interpolated at 150ms render delay; render tick = server tick estimate - 9 ticks.
+- Ghost projectiles: local shot feedback keyed by `localSeq`, dropped when the server projectile arrives, expire after 500ms.
+- Ping every 1s; RTT = average of last 5 samples (drives snapshot-rate and ping color).
+- `serverTickEstimate` = last snapshot tick + RTT/2, advanced by dt each frame.
+
+## Client Input
+
+- Desktop: WASD/arrows move (player faces movement direction), hold LMB fire, wheel zoom. Detected when not touch-capable.
+- Mobile: `detectTouch()` (ontouchstart or coarse pointer + maxTouchPoints > 0). Left stick = move (player faces movement direction), right stick = fire. Sticks use Pointer Events with pointer capture; deadzone 0.15.
+- Touch controls are DOM overlays (`#touch-controls`), shown only when `Input.isTouch`.
 
 ## Commands
 
 ```bash
-godot --path client/                          # Open in editor
-godot --headless --path client/ --export-release "Web" build/web/  # Export for web
-godot --headless --path server/              # Run authoritative multiplayer server (Phase 3 scaffold)
-cd backend && npm start                      # Run backend auth/matchmaking/persistence scaffold (Phase 4)
-GUEST_SESSION_DURATION_MS=3600000 npm start  # Run backend with 1h guest sessions
+./dev.sh                          # Start backend (8787) + game server (7777); open http://127.0.0.1:8787
+cd backend && npm start           # Backend only
+cd gameserver && npm start        # Game server only
+GUEST_SESSION_DURATION_MS=3600000 npm start  # Backend with 1h guest sessions
 ```
+
+For local multiplayer testing use two different origins so localStorage identities stay isolated,
+e.g. one tab at `http://127.0.0.1:8787` and one at `http://localhost:8787`.
+
+## JS Conventions
+
+- ES modules everywhere; browser client imports absolute `/shared/game.js`, game server imports `../../shared/game.js`.
+- Phaser 4.2.1 framework (loaded via CDN), no build step, no bundler.
+- Static typing not available; name variables/params clearly.
+- No comments in code unless explicitly requested.
+- Pure data/helpers live in `shared/game.js`; no DOM or Node imports there.
+- DOM element access via `document.getElementById` with ids defined once in `index.html`.
+- `app` object in `main.js` holds cross-screen state (auth, currentLobby, lobbyWs, game) and is exposed as `window.__app` for debugging.
 
 ## Common Pitfalls
 
-- **Web + ENet**: raw ENet UDP does not work in browsers. Use `WebSocketMultiplayerPeer` for web clients (multiplayer phase).
-- **State sync**: never let clients set their own position/health. Server validates and broadcasts.
-- **Enemy-enemy collision**: enemies don't collide with each other (mask doesn't include layer 2).
-- **Projectile tunneling**: at very high speeds, Area2D projectiles can skip over enemies. Sprayer at 300 u/s is safe at 60 FPS.
-- **Export templates**: must match the exact Godot version.
-- **Weapon cycling**: `weapon_scenes` array order in game.tscn determines cycle order. Blaster must be first (index 0 = starting weapon).
-- **Lobber explosion**: uses `PhysicsDirectSpaceState2D.intersect_shape()` with a circle query. Runs on the physics layer mask 2 (enemies only).
-- **Guest session expiry**: `_save_auth_to_config` must preserve `created_at` for guests. Refresh endpoint only works for guests. Expiry check runs before every auth-required request.
-- **ConfigFile path**: auth stored in `user://config/auth.cfg` (per-user, cross-platform). Never `res://`.
-- **Lobby password**: 4-11 alphanumeric chars only. Hashed with same PBKDF2 as user passwords.
-- **Camera2D smoothing**: ensure `position_smoothing_enabled` is set to `true` for smooth camera follow.
-- **Sprite filtering**: disable texture filtering on sprites for pixel-perfect rendering.
-- **Performance with many Sprite2D nodes**: use sprite atlases or merge sprites when possible for better performance.
+- **Same-origin localStorage**: two browser tabs on the same origin share the same identity. Use different origins (127.0.0.1 vs localhost) for multi-client local tests.
+- **`app.screen` must be set via `setScreen(app, name)`** in `screens/manager.js`; the waiting room live-update and auto-start logic branches on it.
+- **Lobby WS lifecycle**: connect once when entering the Main Lobby (`showLobbyScreen`). Keep it open through the waiting room; it drives both the room list and the auto-start.
+- **Name field only applies to new sessions**: the menu re-validates an existing stored token and keeps it; clearing `sweaty.auth.v1` + reload is how to switch identity.
+- **Never send `shoot` when dead**: the client gates firing on `myAlive`; the server ignores intent movement for dead players.
+- **Snapshot `type` field is required**: `buildSnapshot`/`deltaFrom` must set `type: "snapshot"` or the client ignores the message.
+- **One game per server**: a game server rejects clients whose lobby differs from the active one. Backend `pickServer` spreads load but each server instance is single-game.
+- **Server and client must share the same `shared/game.js`**: prediction assumes identical constants/map; drift causes visible snapping.
+- **Solo death = game over**: the sim freezes when every player is dead (`gameOver`), so respawn only matters with ≥ 2 players.
+- **Obstacles exist server-side too** (unlike the old Godot server): projectiles die on obstacles, players/enemies slide around them via `resolveCircleVsAABB`.
 
 ## Deployment
 
@@ -228,8 +251,8 @@ See [DEPLOY.md](./DEPLOY.md) for full production deployment instructions.
 
 **Quick reference:**
 - Client: `https://shoot.compilechicken.com` (auto-detects backend URL from `window.location.origin`)
-- Backend: Node.js on `localhost:8787` (systemd `sweaty-candy-backend`)
-- Game server: Godot headless on port 7777, proxied through Caddy at `wss://game.compilechicken.com` (systemd `sweaty-candy-server`)
+- Backend: Node.js on `localhost:8787` (systemd `sweaty-candy-backend`), serves the client + `/shared/*`
+- Game server: Node.js on port 7777, proxied through Caddy at `wss://game.compilechicken.com` (systemd `sweaty-candy-server`)
+- Game server env: `BACKEND_BASE_URL`, `ADVERTISED_HOST`, `ADVERTISED_PORT`, `LISTEN_PORT`, `MAX_PLAYERS`
 - Caddy on host (not Docker), imports from `/etc/caddy/sites-enabled/*`
-- Game WebSocket via TLS: Caddy proxies `game.compilechicken.com:443` → `localhost:7777`, resolved the "Caddy cannot proxy Godot WebSocket" issue
-- Server CLI args use `--` separator: `sweaty-server --headless -- --advertised-host game.compilechicken.com --advertised-port 443 --listen-port 7777`
+- Game WebSocket via TLS: Caddy proxies `game.compilechicken.com:443` → `localhost:7777`

@@ -11,6 +11,8 @@ var _knockback: Vector2 = Vector2.ZERO
 
 
 func _physics_process(delta: float) -> void:
+	if GameData.multiplayer_session_active:
+		return
 	if has_meta("network_id"):
 		return
 	if not visible:

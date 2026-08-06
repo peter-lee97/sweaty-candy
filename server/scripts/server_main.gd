@@ -29,16 +29,21 @@ const SPAWN_BAND_WIDTH: float = 200.0
 const MAX_ENEMIES_PER_WAVE: int = 100
 const RTT_THRESHOLD_FAIR: int = 100
 const RTT_THRESHOLD_POOR: int = 200
-const SYNC_HZ_FAIR: float = 15.0
-const SYNC_HZ_POOR: float = 10.0
+const SYNC_HZ_FAIR: float = 20.0
+const SYNC_HZ_POOR: float = 15.0
 const DELTA_POSITION_THRESHOLD: float = 1.0
 const FULL_SYNC_INTERVAL_SEC: float = 1.0
+const TICK_RATE: float = 60.0
+const TICK_DELTA: float = 1.0 / TICK_RATE
+const MAX_FIXED_STEPS_PER_FRAME: int = 5
+const INTENT_QUEUE_MAX: int = 16
+const INTENT_RATE_LIMIT: int = 120
 
 @export var listen_port: int = 7777
 @export var max_players: int = 4
 @export var move_speed: float = 300.0
 @export var arena_half_size: float = 1400.0
-@export var snapshot_rate_hz: float = 20.0
+@export var snapshot_rate_hz: float = 30.0
 @export var backend_base_url: String = "http://127.0.0.1:8787"
 @export var backend_server_name: String = "Godot 2D Server"
 @export var advertised_host: String = "127.0.0.1"
@@ -50,8 +55,11 @@ var _server_tick: int = 0
 var _snapshot_timer: float = 0.0
 var _heartbeat_timer: float = 0.0
 var _registration_retry_timer: float = 0.0
+var _sim_accumulator: float = 0.0
 var _players: Dictionary = {}
 var _pending_inputs: Dictionary = {}
+var _last_intents: Dictionary = {}
+var _intent_rates: Dictionary = {}
 var _backend_server_id: String = ""
 var _is_registering_backend: bool = false
 var _player_shoot_timers: Dictionary = {}
@@ -166,30 +174,14 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if not _game_over:
-		_server_tick += 1
-		_step_player_simulation(delta)
-		_step_enemy_simulation(delta)
-
-		var all_dead: bool = true
-		for ps in _players.values():
-			if ps.get("alive", false):
-				all_dead = false
-				break
-		if all_dead and not _players.is_empty():
-			_game_over = true
-			push_warning("SERVER: All players dead — game over")
-
-		if not _game_over:
-			_step_respawn_timers(delta)
-			_step_projectile_simulation(delta)
-
-			if _wave_system_started and _wave_slots_remaining <= 0 and not _is_spawning:
-				_wave_delay_timer += delta
-				if _wave_delay_timer >= WAVE_DELAY:
-					_wave_delay_timer = 0.0
-					_start_wave(_current_wave + 1)
-			else:
-				_wave_delay_timer = 0.0
+		_sim_accumulator += delta
+		var steps: int = 0
+		while _sim_accumulator >= TICK_DELTA and steps < MAX_FIXED_STEPS_PER_FRAME:
+			_step_simulation(TICK_DELTA)
+			_sim_accumulator -= TICK_DELTA
+			steps += 1
+		if steps >= MAX_FIXED_STEPS_PER_FRAME:
+			_sim_accumulator = 0.0
 
 	_send_adaptive_snapshots(delta)
 
@@ -203,6 +195,33 @@ func _physics_process(delta: float) -> void:
 		if _heartbeat_timer >= heartbeat_interval_sec:
 			_heartbeat_timer = 0.0
 			_send_backend_heartbeat()
+
+
+func _step_simulation(delta: float) -> void:
+	_server_tick += 1
+	_step_player_simulation(delta)
+	_step_enemy_simulation(delta)
+
+	var all_dead: bool = true
+	for ps in _players.values():
+		if ps.get("alive", false):
+			all_dead = false
+			break
+	if all_dead and not _players.is_empty():
+		_game_over = true
+		push_warning("SERVER: All players dead — game over")
+
+	if not _game_over:
+		_step_respawn_timers(delta)
+		_step_projectile_simulation(delta)
+
+		if _wave_system_started and _wave_slots_remaining <= 0 and not _is_spawning:
+			_wave_delay_timer += delta
+			if _wave_delay_timer >= WAVE_DELAY:
+				_wave_delay_timer = 0.0
+				_start_wave(_current_wave + 1)
+		else:
+			_wave_delay_timer = 0.0
 
 
 func _start_server() -> bool:
@@ -224,7 +243,9 @@ func _on_peer_connected(peer_id: int) -> void:
 		net_peer.disconnect_peer(peer_id, true)
 		return
 	_players[peer_id] = _new_player_state(_spawn_position_for_peer(peer_id))
-	_pending_inputs[peer_id] = {}
+	_pending_inputs[peer_id] = []
+	_last_intents[peer_id] = {}
+	_intent_rates[peer_id] = {"count": 0, "window": Time.get_ticks_msec()}
 	_player_shoot_timers[peer_id] = 0.0
 	_player_rtt[peer_id] = 0
 	_player_snapshot_timers[peer_id] = 0.0
@@ -233,11 +254,21 @@ func _on_peer_connected(peer_id: int) -> void:
 		_wave_system_started = true
 		_spawn_countdown_finished()
 	_notify_lobby_state()
+	call_deferred("_send_initial_snapshot_to", peer_id)
+
+
+func _send_initial_snapshot_to(peer_id: int) -> void:
+	if not _players.has(peer_id):
+		return
+	var payload: Dictionary = _build_snapshot_payload(peer_id, true)
+	receive_server_snapshot.rpc_id(peer_id, payload)
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
 	_players.erase(peer_id)
 	_pending_inputs.erase(peer_id)
+	_last_intents.erase(peer_id)
+	_intent_rates.erase(peer_id)
 	_player_shoot_timers.erase(peer_id)
 	_player_rtt.erase(peer_id)
 	_player_snapshot_timers.erase(peer_id)
@@ -256,6 +287,7 @@ func _reset_game_state() -> void:
 	_game_over = false
 	_wave_system_started = false
 	_server_tick = 0
+	_sim_accumulator = 0.0
 	_next_enemy_id = 0
 	_next_proj_id = 0
 	_snapshot_timer = 0.0
@@ -263,6 +295,9 @@ func _reset_game_state() -> void:
 	_player_snapshot_timers.clear()
 	_last_sent_state.clear()
 	_full_sync_timer = 0.0
+	_pending_inputs.clear()
+	_last_intents.clear()
+	_intent_rates.clear()
 
 
 @rpc("any_peer", "call_remote", "unreliable")
@@ -292,14 +327,26 @@ func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, w
 	var peer_id: int = multiplayer.get_remote_sender_id()
 	if not _players.has(peer_id):
 		return
-	_pending_inputs[peer_id] = {
+	var now: int = Time.get_ticks_msec()
+	var rate_data: Dictionary = _intent_rates.get(peer_id, {"count": 0, "window": now})
+	if now - rate_data["window"] >= 1000:
+		rate_data = {"count": 0, "window": now}
+	rate_data["count"] += 1
+	_intent_rates[peer_id] = rate_data
+	if rate_data["count"] > INTENT_RATE_LIMIT:
+		return
+	var queue: Array = _pending_inputs.get(peer_id, [])
+	if queue.size() >= INTENT_QUEUE_MAX:
+		queue.pop_front()
+	queue.append({
 		"tick": tick,
 		"move": move,
 		"aim": aim,
 		"shoot": shoot,
 		"weapon_cycle": weapon_cycle,
 		"local_seq": local_seq,
-	}
+	})
+	_pending_inputs[peer_id] = queue
 	if rtt >= 0:
 		_player_rtt[peer_id] = rtt
 
@@ -307,7 +354,12 @@ func submit_player_intent(tick: int, move: Vector2, aim: Vector2, shoot: bool, w
 func _step_player_simulation(delta: float) -> void:
 	for peer_id: int in _players.keys():
 		var state: Dictionary = _players[peer_id]
-		var intent: Dictionary = _pending_inputs.get(peer_id, {})
+		var queue: Array = _pending_inputs.get(peer_id, [])
+		var intent: Dictionary = _last_intents.get(peer_id, {})
+		if not queue.is_empty():
+			intent = queue.pop_front()
+			_pending_inputs[peer_id] = queue
+			_last_intents[peer_id] = intent
 
 		var move_input: Vector2 = intent.get("move", Vector2.ZERO)
 		var velocity: Vector2 = move_input.normalized() * move_speed
@@ -501,8 +553,11 @@ func _build_snapshot_payload(peer_id: int, is_full: bool) -> Dictionary:
 		if should_send:
 			payload["players"][pid] = {
 				"position": pos,
+				"velocity": ps["velocity"],
+				"aim": ps["aim"],
 				"health": health,
 				"respawn_timer": respawn,
+				"last_input_tick": ps.get("last_input_tick", 0),
 			}
 			last_players[str(pid)] = {
 				"position": pos,

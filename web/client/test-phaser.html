@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <title>Phaser Test</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "phaser": "https://cdn.jsdelivr.net/npm/phaser@4.2.1/dist/phaser.esm.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="game-container"></div>
+  <script type="module">
+    import Phaser from 'phaser';
+    console.log('Phaser loaded:', Phaser);
+    
+    const config = {
+      type: Phaser.WEBGL,
+      parent: "game-container",
+      width: 800,
+      height: 600,
+      backgroundColor: "#000000"
+    };
+    
+    const game = new Phaser.Game(config);
+    console.log('Phaser game created');
+  </script>
+</body>
+</html>

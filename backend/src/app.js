@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { URL } from "node:url";
@@ -5,6 +6,47 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { generateGuestId, generateGuestUsername, hashPassword, issueToken, verifyPassword } from "./auth.js";
 import { readStore, writeStore } from "./store.js";
+
+const CLIENT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/client");
+const SHARED_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../shared");
+
+const STATIC_MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon"
+};
+
+function serveStaticFile(res, pathname) {
+  if (!pathname || pathname.includes("..")) {
+    return false;
+  }
+  let filePath;
+  if (pathname === "/") {
+    filePath = path.join(CLIENT_DIR, "index.html");
+  } else if (pathname.startsWith("/shared/")) {
+    filePath = path.resolve(path.join(SHARED_DIR, pathname.slice("/shared/".length)));
+    if (!filePath.startsWith(SHARED_DIR)) {
+      return false;
+    }
+  } else {
+    filePath = path.resolve(path.join(CLIENT_DIR, pathname));
+    if (!filePath.startsWith(CLIENT_DIR)) {
+      return false;
+    }
+  }
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    return false;
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  res.writeHead(200, { "Content-Type": STATIC_MIME[ext] || "application/octet-stream", "Cache-Control": "no-cache" });
+  fs.createReadStream(filePath).pipe(res);
+  return true;
+}
 
 const DEFAULT_PORT = Number(process.env.PORT || 8787);
 const DEFAULT_HOST = process.env.HOST || "0.0.0.0";
@@ -61,6 +103,10 @@ function normalizeLobby(store, lobby) {
     gameServerId: lobby.gameServerId,
     serverHost: assignedServer ? assignedServer.host : "",
     serverPort: assignedServer ? assignedServer.port : 0,
+    players: lobby.playerIds.map((pid) => {
+      const user = store.users.find((u) => u.id === pid);
+      return { id: pid, username: user ? user.username : pid };
+    }),
     createdAt: lobby.createdAt
   };
 }
@@ -193,7 +239,23 @@ function createBackendServer() {
       }
 
       if (pathname === "/v1/auth/guest" && method === "POST") {
-        const username = generateGuestUsername(["apple", "banana", "cherry", "grape", "kiwi", "lemon", "mango", "orange", "peach", "plum"], ["red", "blue", "green", "yellow", "purple", "orange", "pink", "white", "black", "teal"], store);
+        const body = await readBody(req);
+        const requested = String(body.username || "").trim();
+        let username = "";
+        if (requested) {
+          if (!/^[A-Za-z0-9_ ]{3,20}$/.test(requested)) {
+            return json(res, 400, { error: "username must be 3-20 characters (letters, numbers, space, underscore)" });
+          }
+          const taken =
+            store.users.some((u) => u.username.toLowerCase() === requested.toLowerCase()) ||
+            Object.values(store.guestSessions).some((s) => s.username.toLowerCase() === requested.toLowerCase());
+          if (taken) {
+            return json(res, 409, { error: "username already taken" });
+          }
+          username = requested;
+        } else {
+          username = generateGuestUsername(["apple", "banana", "cherry", "grape", "kiwi", "lemon", "mango", "orange", "peach", "plum"], ["red", "blue", "green", "yellow", "purple", "orange", "pink", "white", "black", "teal"], store);
+        }
         const guestId = generateGuestId();
         const createdAt = Date.now();
         const expiresAt = createdAt + GUEST_SESSION_DURATION_MS;
@@ -391,6 +453,10 @@ function createBackendServer() {
             port: serverPick.port
           }
         });
+      }
+
+      if (method === "GET" && serveStaticFile(res, pathname)) {
+        return;
       }
 
       return json(res, 404, { error: "not found" });

@@ -6,7 +6,7 @@ signal connection_failed(reason: String)
 signal snapshot_received(snapshot_data: Dictionary)
 signal rtt_updated(rtt_ms: int)
 
-const PING_INTERVAL_SEC: float = 2.0
+const PING_INTERVAL_SEC: float = 1.0
 const RTT_HISTORY_SIZE: int = 5
 
 var _peer: WebSocketMultiplayerPeer

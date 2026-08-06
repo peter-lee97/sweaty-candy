@@ -5,16 +5,19 @@ const ENEMY_POOL_SIZE: int = 10
 const FAST_ENEMY_POOL_SIZE: int = 10
 const TANK_ENEMY_POOL_SIZE: int = 5
 const PICKUP_POOL_SIZE: int = 20
-const SMOOTH_RATE: float = 12.0
-const INTENT_SEND_HZ: float = 20.0
 const WAVE_DELAY: float = 3.0
 const ARENA_HALF_SIZE: float = 1400.0
+const ARENA_CLAMP_DIST: float = ARENA_HALF_SIZE - 14.0
 const SPAWN_STAGGER: float = 0.35
 const SPAWN_INSET: float = 80.0
 const SPAWN_BAND_WIDTH: float = 200.0
 const MAX_ENEMIES_PER_WAVE: int = 100
-const INTERPOLATION_DELAY_SEC: float = 0.1
-const SNAPSHOT_BUFFER_SIZE: int = 6
+const TICK_RATE: float = 60.0
+const RENDER_DELAY_SEC: float = 0.15
+const SNAPSHOT_BUFFER_SIZE: int = 12
+const PREDICTION_HISTORY_SIZE: int = 60
+const RECONCILE_BLEND_SEC: float = 0.12
+const RECONCILE_SNAP_DIST: float = 60.0
 const GHOST_PROJ_TIMEOUT_MSEC: int = 500
 
 @onready var _player_spawn: Marker2D = %PlayerSpawn
@@ -39,7 +42,12 @@ var _sp_projectile_nodes: Array[Node] = []
 var _sp_pickup_nodes: Array[Node] = []
 var _remote_targets: Dictionary = {}
 var _enemy_targets: Dictionary = {}
-var _intent_timer: float = 0.0
+var _projectile_targets: Dictionary = {}
+var _prediction_history: Array = []
+var _correction_remaining: Vector2 = Vector2.ZERO
+var _server_tick_estimate: float = 0.0
+var _has_server_time: bool = false
+var _mp_shoot_timer: float = 0.0
 var _spawn_countdown: float = 5.0
 var _last_countdown_tick: int = 5
 var _current_wave: int = 0
@@ -353,18 +361,22 @@ func _on_connected_to_server() -> void:
 
 func _physics_process(delta: float) -> void:
 	if GameData.multiplayer_session_active:
+		_server_tick_estimate += delta * TICK_RATE
 		_update_interpolated_targets()
 		_cleanup_ghost_projectiles()
 		for node_id in _remote_targets:
-			var node: CharacterBody2D = _remote_player_nodes.get(node_id)
+			var node: Node = _remote_player_nodes.get(node_id)
 			if node:
-				node.global_position = node.global_position.lerp(
-					_remote_targets[node_id], 1.0 - exp(-delta * SMOOTH_RATE))
+				node.global_position = _remote_targets[node_id]
 		for eid_str in _enemy_targets:
 			var node: Node = _server_enemy_nodes.get(eid_str)
 			if node:
-				node.global_position = node.global_position.lerp(
-					_enemy_targets[eid_str], 1.0 - exp(-delta * SMOOTH_RATE))
+				node.global_position = _enemy_targets[eid_str]
+		for pid_str in _projectile_targets:
+			var node: Node = _server_projectile_nodes.get(pid_str)
+			if node:
+				node.global_position = _projectile_targets[pid_str]
+		_step_local_prediction(delta)
 
 	if _spawn_countdown > 0.0:
 		_spawn_countdown -= delta
@@ -376,29 +388,49 @@ func _physics_process(delta: float) -> void:
 			_spawn_countdown = 0.0
 			GameEvents.countdown_finished.emit()
 
-	if not GameData.multiplayer_session_active or not _local_player:
-		return
-	if _is_respawning:
+
+func _step_local_prediction(delta: float) -> void:
+	if not _local_player or _is_respawning or _game_ended:
 		return
 	if not NetworkClient.has_connection():
 		return
 	_network_tick += 1
 
-	var move_dir: Vector2 = _local_player.velocity.normalized() if _local_player.velocity.length_squared() > 0.01 else Vector2.ZERO
-	var aim_dir: Vector2 = _local_player._aim_direction
+	var input_dir: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var new_pos: Vector2 = _local_player.global_position + input_dir * _local_player.move_speed * delta
+	new_pos.x = clamp(new_pos.x, -ARENA_CLAMP_DIST, ARENA_CLAMP_DIST)
+	new_pos.y = clamp(new_pos.y, -ARENA_CLAMP_DIST, ARENA_CLAMP_DIST)
+	if _correction_remaining.length() > 0.1:
+		var correction_step: Vector2 = _correction_remaining * min(1.0, delta / RECONCILE_BLEND_SEC)
+		new_pos += correction_step
+		_correction_remaining -= correction_step
+		if _correction_remaining.length() < 0.1:
+			_correction_remaining = Vector2.ZERO
+	_local_player.global_position = new_pos
+	_local_player.velocity = input_dir * _local_player.move_speed
+	if input_dir.length_squared() > 0.0:
+		_local_player._aim_direction = input_dir
+
+	_prediction_history.append({"tick": _network_tick, "pos": new_pos, "health": _local_player.health})
+	while _prediction_history.size() > PREDICTION_HISTORY_SIZE:
+		_prediction_history.pop_front()
+
+	_mp_shoot_timer -= delta
 	var wants_shoot: bool = Input.is_action_pressed("shoot") and not GameEvents.ui_blocking_input
+	if wants_shoot and _mp_shoot_timer <= 0.0:
+		_mp_shoot_timer = _local_player.shoot_cooldown
+		_on_spawn_projectile_requested(new_pos, _local_player._aim_direction)
+		GameEvents.projectile_fired.emit()
+
 	var weapon_cycle: int = 0
 	if Input.is_action_just_pressed("cycle_next"):
 		weapon_cycle = 1
 	elif Input.is_action_just_pressed("cycle_prev"):
 		weapon_cycle = -1
 
-	_intent_timer += delta
-	if _intent_timer >= 1.0 / INTENT_SEND_HZ:
-		_intent_timer -= 1.0 / INTENT_SEND_HZ
-		var local_seq: int = _pending_local_proj_seq
-		_pending_local_proj_seq = -1
-		NetworkClient.send_player_intent(_network_tick, move_dir, aim_dir, wants_shoot, weapon_cycle, local_seq)
+	var local_seq: int = _pending_local_proj_seq
+	_pending_local_proj_seq = -1
+	NetworkClient.send_player_intent(_network_tick, input_dir, _local_player._aim_direction, wants_shoot, weapon_cycle, local_seq)
 
 
 func _apply_snapshot(snapshot: Dictionary) -> void:
@@ -421,11 +453,20 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 		if id == NetworkClient.get_own_peer_id():
 			if _local_player:
 				var server_pos: Vector2 = pd.get("position", _local_player.global_position)
-				var error: float = _local_player.global_position.distance_to(server_pos)
-				if error > 48.0:
-					_local_player.global_position = server_pos
-				elif error > 4.0:
-					_local_player.global_position = _local_player.global_position.lerp(server_pos, 0.3)
+				var echo_tick: int = pd.get("last_input_tick", -1)
+				if echo_tick >= 0:
+					var entry: Dictionary = _find_prediction(echo_tick)
+					if entry.is_empty():
+						_local_player.global_position = server_pos
+						_correction_remaining = Vector2.ZERO
+					else:
+						var error: Vector2 = server_pos - entry["pos"]
+						var err_len: float = error.length()
+						if err_len > RECONCILE_SNAP_DIST:
+							_local_player.global_position = server_pos
+							_correction_remaining = Vector2.ZERO
+						elif err_len > 0.5:
+							_correction_remaining = error
 				var server_health: int = pd.get("health", _local_player.health)
 				if server_health < _local_player.health and not _is_respawning:
 					_local_player.health = server_health
@@ -434,12 +475,15 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 				if respawn_timer > 0.0:
 					_is_respawning = true
 					_local_player.hide()
+					_prediction_history.clear()
+					_correction_remaining = Vector2.ZERO
 					GameEvents.respawn_tick.emit(respawn_timer)
 				elif _is_respawning and server_health > 0:
 					_is_respawning = false
 					_local_player.show()
 					_local_player.health = server_health
 					_local_player.global_position = pd.get("position", Vector2.ZERO)
+					_correction_remaining = Vector2.ZERO
 					GameEvents.player_health_changed.emit(_local_player.health, _local_player.max_health)
 					GameEvents.respawn_complete.emit()
 				elif not _is_respawning and server_health <= 0:
@@ -505,6 +549,7 @@ func _apply_snapshot(snapshot: Dictionary) -> void:
 				proj.global_position = pd.get("position", Vector2.ZERO)
 				if proj.has_method("set_direction"):
 					proj.set_direction(pd.get("direction", Vector2.RIGHT))
+				proj.set_physics_process(false)
 				_server_projectile_nodes[pid_str] = proj
 
 	if is_full:
@@ -537,15 +582,23 @@ func _process_removed_entities(snapshot: Dictionary) -> void:
 	for pid: String in snapshot.get("removed_projectiles", []):
 		var proj: Node = _server_projectile_nodes.get(pid)
 		if proj:
+			_projectile_targets.erase(pid)
 			_release_proj(proj)
 			_server_projectile_nodes.erase(pid)
 
 
 func _push_snapshot_buffer(snapshot: Dictionary) -> void:
+	var tick: int = snapshot.get("server_tick", 0)
+	var rtt_sec: float = NetworkClient.get_rtt() / 1000.0
+	var arrival_estimate: float = tick + rtt_sec * 0.5 * TICK_RATE
+	if not _has_server_time or arrival_estimate > _server_tick_estimate:
+		_server_tick_estimate = arrival_estimate
+		_has_server_time = true
 	var entry: Dictionary = {
-		"receive_time": Time.get_ticks_msec() / 1000.0,
+		"tick": tick,
 		"players": snapshot.get("players", {}),
 		"enemies": snapshot.get("enemies", {}),
+		"projectiles": snapshot.get("projectiles", {}),
 	}
 	_snapshot_buffer.append(entry)
 	while _snapshot_buffer.size() > SNAPSHOT_BUFFER_SIZE:
@@ -555,65 +608,69 @@ func _push_snapshot_buffer(snapshot: Dictionary) -> void:
 func _update_interpolated_targets() -> void:
 	_remote_targets.clear()
 	_enemy_targets.clear()
-	if _snapshot_buffer.is_empty():
+	_projectile_targets.clear()
+	if _snapshot_buffer.is_empty() or not _has_server_time:
 		return
-	if _snapshot_buffer.size() == 1:
-		var snap: Dictionary = _snapshot_buffer[0]
-		for id in snap.get("players", {}):
-			if id == NetworkClient.get_own_peer_id():
-				continue
-			_remote_targets[str(id)] = snap["players"][id].get("position", Vector2.ZERO)
-		for eid in snap.get("enemies", {}):
-			_enemy_targets[eid] = snap["enemies"][eid].get("position", Vector2.ZERO)
-		return
-	var latest_time: float = _snapshot_buffer.back()["receive_time"]
-	var render_time: float = latest_time - INTERPOLATION_DELAY_SEC
-	if render_time <= _snapshot_buffer[0]["receive_time"]:
-		var snap0: Dictionary = _snapshot_buffer[0]
-		for id in snap0.get("players", {}):
-			if id == NetworkClient.get_own_peer_id():
-				continue
-			_remote_targets[str(id)] = snap0["players"][id].get("position", Vector2.ZERO)
-		for eid in snap0.get("enemies", {}):
-			_enemy_targets[eid] = snap0["enemies"][eid].get("position", Vector2.ZERO)
-		return
+	var render_tick: float = _server_tick_estimate - RENDER_DELAY_SEC * TICK_RATE
 	var from_snap: Dictionary = _snapshot_buffer[0]
-	var to_snap: Dictionary = _snapshot_buffer[1]
-	for i in range(1, _snapshot_buffer.size()):
-		var t: float = _snapshot_buffer[i]["receive_time"]
-		if t >= render_time:
-			to_snap = _snapshot_buffer[i]
-			from_snap = _snapshot_buffer[i - 1]
-			break
-		from_snap = _snapshot_buffer[i]
-		to_snap = _snapshot_buffer[i]
-	var from_time: float = from_snap["receive_time"]
-	var to_time: float = to_snap["receive_time"]
+	var to_snap: Dictionary = from_snap
+	if render_tick > from_snap["tick"]:
+		for i in range(1, _snapshot_buffer.size()):
+			var snap: Dictionary = _snapshot_buffer[i]
+			if snap["tick"] >= render_tick:
+				to_snap = snap
+				from_snap = _snapshot_buffer[i - 1]
+				break
+			from_snap = snap
+			to_snap = snap
+	var from_tick: float = from_snap["tick"]
+	var to_tick: float = to_snap["tick"]
 	var alpha: float = 0.0
-	if to_time > from_time:
-		alpha = clamp((render_time - from_time) / (to_time - from_time), 0.0, 1.0)
+	if to_tick > from_tick:
+		alpha = clamp((render_tick - from_tick) / (to_tick - from_tick), 0.0, 1.0)
+	_apply_snapshot_targets(from_snap, to_snap, alpha)
+
+
+func _apply_snapshot_targets(from_snap: Dictionary, to_snap: Dictionary, alpha: float) -> void:
 	var from_players: Dictionary = from_snap.get("players", {})
 	var to_players: Dictionary = to_snap.get("players", {})
 	for id in to_players:
 		if id == NetworkClient.get_own_peer_id():
 			continue
+		var to_pd: Dictionary = to_players[id]
+		var pos: Vector2 = to_pd.get("position", Vector2.ZERO)
 		var from_pd: Dictionary = from_players.get(id, {})
-		if from_pd.is_empty():
-			_remote_targets[str(id)] = to_players[id].get("position", Vector2.ZERO)
-			continue
-		var p_from: Vector2 = from_pd.get("position", Vector2.ZERO)
-		var p_to: Vector2 = to_players[id].get("position", Vector2.ZERO)
-		_remote_targets[str(id)] = p_from.lerp(p_to, alpha)
+		if not from_pd.is_empty():
+			pos = from_pd.get("position", pos).lerp(pos, alpha)
+		_remote_targets[str(id)] = pos
 	var from_enemies: Dictionary = from_snap.get("enemies", {})
 	var to_enemies: Dictionary = to_snap.get("enemies", {})
 	for eid in to_enemies:
+		var to_ed: Dictionary = to_enemies[eid]
+		var pos: Vector2 = to_ed.get("position", Vector2.ZERO)
 		var from_ed: Dictionary = from_enemies.get(eid, {})
-		if from_ed.is_empty():
-			_enemy_targets[eid] = to_enemies[eid].get("position", Vector2.ZERO)
-			continue
-		var e_from: Vector2 = from_ed.get("position", Vector2.ZERO)
-		var e_to: Vector2 = to_enemies[eid].get("position", Vector2.ZERO)
-		_enemy_targets[eid] = e_from.lerp(e_to, alpha)
+		if not from_ed.is_empty():
+			pos = from_ed.get("position", pos).lerp(pos, alpha)
+		_enemy_targets[eid] = pos
+	var from_projectiles: Dictionary = from_snap.get("projectiles", {})
+	var to_projectiles: Dictionary = to_snap.get("projectiles", {})
+	for pid in to_projectiles:
+		var to_pd: Dictionary = to_projectiles[pid]
+		var pos: Vector2 = to_pd.get("position", Vector2.ZERO)
+		var from_pd: Dictionary = from_projectiles.get(pid, {})
+		if not from_pd.is_empty():
+			pos = from_pd.get("position", pos).lerp(pos, alpha)
+		_projectile_targets[str(pid)] = pos
+
+
+func _find_prediction(tick: int) -> Dictionary:
+	var result: Dictionary = {}
+	for entry in _prediction_history:
+		if entry["tick"] <= tick:
+			result = entry
+		else:
+			break
+	return result
 
 
 func _spawn_remote_player(id: String, data: Dictionary) -> void:
@@ -632,6 +689,8 @@ func _spawn_player() -> void:
 	_local_player = _player_scene.instantiate()
 	var spawn_offset: Vector2 = Vector2(randf_range(-50.0, 50.0), randf_range(-50.0, 50.0))
 	_local_player.global_position = _player_spawn.global_position + spawn_offset
+	if GameData.multiplayer_session_active:
+		_local_player.set_physics_process(false)
 	add_child(_local_player)
 
 	var camera: Node = %Camera2D
@@ -663,7 +722,13 @@ func _cleanup_mp_resources() -> void:
 		if is_instance_valid(node):
 			_release_proj(node)
 	_server_projectile_nodes.clear()
+	_projectile_targets.clear()
 	_snapshot_buffer.clear()
+	_prediction_history.clear()
+	_correction_remaining = Vector2.ZERO
+	_server_tick_estimate = 0.0
+	_has_server_time = false
+	_mp_shoot_timer = 0.0
 	for seq: int in _ghost_projectiles.keys():
 		var ghost: Node = _ghost_projectiles[seq]
 		if is_instance_valid(ghost):
