@@ -45,8 +45,8 @@ jobs:
       - name: Stop old systemd services
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }} \
-            "sudo systemctl stop sweaty-candy-backend sweaty-candy-server 2>/dev/null || true && \
-             sudo systemctl disable sweaty-candy-backend sweaty-candy-server 2>/dev/null || true"
+            "sudo systemctl stop sweaty-candy-backend sweaty-candy-server 2>/dev/null || echo 'services not running or already stopped' && \
+             sudo systemctl disable sweaty-candy-backend sweaty-candy-server 2>/dev/null || echo 'services already disabled'"
 
       - name: Copy docker-compose to server
         run: |
