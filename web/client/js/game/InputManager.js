@@ -88,7 +88,7 @@ export class InputManager {
   }
 }
 
-export function detectTouch() {
+function detectTouch() {
   try {
     return 'ontouchstart' in window || (navigator.maxTouchPoints > 0 && window.matchMedia('(pointer: coarse)').matches);
   } catch {

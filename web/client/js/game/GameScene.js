@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { CONFIG, MAP, ENEMY_TYPES, moveCircle } from '/shared/game.js';
+import { CONFIG, moveCircle } from '/shared/game.js';
 import { InputManager } from './InputManager.js';
 import { IsometricRenderer } from './IsometricRenderer.js';
 import { EntityManager } from './EntityManager.js';
@@ -48,7 +48,10 @@ export class GameScene extends Phaser.Scene {
     this.predictedPos = this.snapshotMy();
     
     this.cameras.main.setZoom(0.55);
-    
+
+    const initScreen = this.isoRenderer.worldToScreen(this.predictedPos.x, this.predictedPos.y);
+    this.cameras.main.centerOn(initScreen.x, initScreen.y);
+
     this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY) => {
       const currentZoom = this.cameras.main.zoom;
       const newZoom = Phaser.Math.Clamp(
@@ -189,8 +192,8 @@ export class GameScene extends Phaser.Scene {
     const k = Math.min(1, dt * 6);
     const cam = this.cameras.main;
     const currentCenter = {
-      x: cam.scrollX + cam.width / 2 / cam.zoom,
-      y: cam.scrollY + cam.height / 2 / cam.zoom
+      x: cam.scrollX + cam.width / 2,
+      y: cam.scrollY + cam.height / 2
     };
     
     const newCenter = {

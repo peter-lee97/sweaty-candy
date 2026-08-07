@@ -1,0 +1,41 @@
+name: sweaty-candy
+
+services:
+  backend:
+    image: sweaty-candy-backend:latest
+    pull_policy: never
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      PORT: "8787"
+      HOST: "0.0.0.0"
+      GUEST_SESSION_DURATION_MS: "7200000"
+    volumes:
+      - sweaty-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8787/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  gameserver:
+    image: sweaty-candy-gameserver:latest
+    pull_policy: never
+    ports:
+      - "127.0.0.1:7777:7777"
+    environment:
+      BACKEND_BASE_URL: http://backend:8787
+      ADVERTISED_HOST: game.compilechicken.com
+      ADVERTISED_PORT: "443"
+      LISTEN_PORT: "7777"
+      LISTEN_HOST: "0.0.0.0"
+      MAX_PLAYERS: "4"
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  sweaty-data:

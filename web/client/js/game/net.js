@@ -3,7 +3,6 @@ import { CONFIG } from "/shared/game.js";
 const R = CONFIG;
 const HISTORY_MAX = 60;
 const SNAPSHOT_BUFFER = 12;
-const RENDER_DELAY_TICKS = Math.round(R.net.renderDelay * R.tickRate);
 const RTT_HISTORY = 5;
 
 export class Net {
@@ -145,7 +144,9 @@ export class Net {
   }
 
   renderTick() {
-    return this.serverTickEstimate - RENDER_DELAY_TICKS;
+    const delay = Math.max(0.08, Math.min(0.3, this.rtt / 1000 * 0.6 + 0.05));
+    const delayTicks = Math.round(delay * R.tickRate);
+    return this.serverTickEstimate - delayTicks;
   }
 
   recordPrediction(tick, pos, health) {

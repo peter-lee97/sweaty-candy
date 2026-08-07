@@ -16,8 +16,7 @@ const app = {
   api,
   currentLobby: null,
   lobbyWs: null,
-  game: null,
-  screens: {}
+  game: null
 };
 
 async function ensureIdentity(username) {
@@ -75,8 +74,6 @@ function handleLobbies(lobbies) {
   }
   if (app.screen === "lobby") app.lobbyRender(lobbies);
 }
-
-app.handleLobbies = handleLobbies;
 
 app.showMenuScreen = () => {
   app.currentLobby = null;

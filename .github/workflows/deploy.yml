@@ -1,0 +1,66 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        run: |
+          docker build -f Dockerfile.backend -t sweaty-candy-backend:latest .
+          docker save sweaty-candy-backend:latest > backend.tar
+
+      - name: Build gameserver image
+        run: |
+          docker build -f Dockerfile.gameserver -t sweaty-candy-gameserver:latest .
+          docker save sweaty-candy-gameserver:latest > gameserver.tar
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.MC_PROD_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.MC_PROD_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload images to server
+        run: |
+          scp -i ~/.ssh/id_rsa backend.tar gameserver.tar ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }}:/home/dev/docker-images/
+
+      - name: Load images on server
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }} \
+            "docker load < /home/dev/docker-images/backend.tar && \
+             docker load < /home/dev/docker-images/gameserver.tar"
+
+      - name: Stop old systemd services
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }} \
+            "sudo systemctl stop sweaty-candy-backend sweaty-candy-server 2>/dev/null || true && \
+             sudo systemctl disable sweaty-candy-backend sweaty-candy-server 2>/dev/null || true"
+
+      - name: Copy docker-compose to server
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }} \
+            "mkdir -p /opt/sweaty-candy && \
+             ( [ ! -f /opt/sweaty-candy/docker-compose.prod.yml ] || cp /opt/sweaty-candy/docker-compose.prod.yml /opt/sweaty-candy/docker-compose.prod.yml.bak )"
+          scp -i ~/.ssh/id_rsa docker-compose.prod.yml ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }}:/opt/sweaty-candy/
+
+      - name: Deploy with Docker Compose
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }} \
+            "docker compose -f /opt/sweaty-candy/docker-compose.prod.yml up -d"
+
+      - name: Cleanup server artifacts
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }} \
+            "rm -f /home/dev/docker-images/backend.tar /home/dev/docker-images/gameserver.tar"

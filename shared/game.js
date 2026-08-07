@@ -10,7 +10,6 @@ export const CONFIG = {
   pickup: { dropChance: 0.15, heal: 25, lifetime: 10.0, radius: 24 },
   difficulty: { hpPerWave: 0.05, speedPerWave: 0.015, speedMax: 1.5 },
   net: {
-    renderDelay: 0.15,
     reconcileSnap: 40,
     reconcileBlend: 0.25,
     ghostTimeout: 0.5,
@@ -46,10 +45,6 @@ export const MAP = {
 
 export function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
-}
-
-export function lerp(a, b, t) {
-  return a + (b - a) * t;
 }
 
 export function difficultyHpMultiplier(wave) {

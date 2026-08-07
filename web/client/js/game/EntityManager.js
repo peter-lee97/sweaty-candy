@@ -26,7 +26,6 @@ export class EntityManager {
     this.pickups = new Map();
     this.playerFx = new Map();
     this.enemyFx = new Map();
-    this.pickupFx = new Map();
     this.ghostGfx = null;
     this.pendingDestroy = [];
   }
@@ -54,10 +53,22 @@ export class EntityManager {
 
   updateRemotePlayers(a, b, alpha, time) {
     const net = this.scene.net;
+    const renderTick = net.renderTick();
     for (const [id, ent] of b.players) {
       if (id === net.myId) continue;
       const pa = a.players.get(id);
-      const pos = pa ? lerpVec(pa.position, ent.position, alpha) : { x: ent.position[0], y: ent.position[1] };
+      let pos;
+      if (pa) {
+        pos = lerpVec(pa.position, ent.position, alpha);
+      } else {
+        const ticksSince = renderTick - b.serverTick;
+        if (ticksSince <= 0 || ticksSince > 30) {
+          pos = { x: ent.position[0], y: ent.position[1] };
+        } else {
+          const vel = ent.velocity || [0, 0];
+          pos = { x: ent.position[0] + vel[0] * ticksSince / R.tickRate, y: ent.position[1] + vel[1] * ticksSince / R.tickRate };
+        }
+      }
       const old = this.playerFx.get(id);
       if (old && old.hp > ent.health) this.scene.burst(ent.position, '#dce6ff', 4, 60);
       this.playerFx.set(id, { hp: ent.health });
@@ -81,11 +92,27 @@ export class EntityManager {
   }
 
   updateEnemies(a, b, alpha, time) {
+    const net = this.scene.net;
+    const renderTick = net.renderTick();
     for (const [id, ent] of b.enemies) {
       const ea = a.enemies.get(id);
-      const pos = ea ? lerpVec(ea.position, ent.position, alpha) : { x: ent.position[0], y: ent.position[1] };
+      let pos;
       let angle = 0;
-      if (ea) angle = Math.atan2(ent.position[1] - ea.position[1], ent.position[0] - ea.position[0]);
+      if (ea) {
+        pos = lerpVec(ea.position, ent.position, alpha);
+        angle = Math.atan2(ent.position[1] - ea.position[1], ent.position[0] - ea.position[0]);
+      } else {
+        const ticksSince = renderTick - b.serverTick;
+        if (ticksSince <= 0 || ticksSince > 30) {
+          pos = { x: ent.position[0], y: ent.position[1] };
+        } else {
+          const vel = ent.velocity || [0, 0];
+          pos = { x: ent.position[0] + vel[0] * ticksSince / R.tickRate, y: ent.position[1] + vel[1] * ticksSince / R.tickRate };
+          if (vel[0] !== 0 || vel[1] !== 0) {
+            angle = Math.atan2(vel[1], vel[0]);
+          }
+        }
+      }
 
       const fx = this.enemyFx.get(id);
       const prevHp = fx ? fx.hp : ent.maxHp;
@@ -122,8 +149,6 @@ export class EntityManager {
     for (const [id, ent] of b.pickups) {
       const pa = a.pickups.get(id);
       const pos = pa ? lerpVec(pa.position, ent.position, alpha) : { x: ent.position[0], y: ent.position[1] };
-      const fx = this.pickupFx.get(id) || { t: time };
-      this.pickupFx.set(id, fx);
       let K = this.pickups.get(id);
       if (!K) { K = this.createPickupObj(); this.pickups.set(id, K); }
       this.drawPickup(K, pos, time);

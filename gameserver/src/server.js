@@ -22,6 +22,22 @@ let activeLobbyId = null;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+let lastTick = performance.now();
+const tickDelta = 1000 / R.tickRate;
+
+function gameLoop() {
+  const now = performance.now();
+  let accumulator = now - lastTick;
+  lastTick = now;
+  if (accumulator > 500) accumulator = 500;
+  while (accumulator >= tickDelta) {
+    sim.step(R.tickDelta);
+    accumulator -= tickDelta;
+  }
+  sendSnapshots();
+  setTimeout(gameLoop, 0);
+}
+
 async function backendRequest(pathname, options = {}) {
   const res = await fetch(`${BACKEND_BASE}${pathname}`, options);
   let body = null;
@@ -269,10 +285,7 @@ server.listen(LISTEN_PORT, LISTEN_HOST, () => {
 
 startRegistration();
 
-setInterval(() => {
-  sim.step(R.tickDelta);
-  sendSnapshots();
-}, 1000 / R.tickRate);
+gameLoop();
 
 process.on("SIGINT", () => {
   console.log("Shutting down game server");

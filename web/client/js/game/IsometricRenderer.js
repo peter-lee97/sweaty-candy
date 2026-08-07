@@ -35,7 +35,7 @@ export class IsometricRenderer {
     g.fillPath();
     g.lineStyle(4, 0x3a3a48, 1);
     g.strokePath();
-    g.setDepth(-10);
+    g.setDepth(-10000);
   }
 
   drawGrid() {
@@ -50,7 +50,7 @@ export class IsometricRenderer {
       const d = this.worldToScreen(half, gr);
       g.lineBetween(c.x, c.y, d.x, d.y);
     }
-    g.setDepth(-9);
+    g.setDepth(-9999);
   }
 
   drawObstacles() {

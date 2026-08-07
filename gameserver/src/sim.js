@@ -302,6 +302,8 @@ export class GameSim {
       const maxSpeed = enemy.speed * 2.5;
       const totalVx = Math.min(Math.max(vx + enemy.knockback.x, -maxSpeed), maxSpeed);
       const totalVy = Math.min(Math.max(vy + enemy.knockback.y, -maxSpeed), maxSpeed);
+      enemy.vx = totalVx;
+      enemy.vy = totalVy;
       const target2 = {
         x: enemy.position.x + totalVx * dt,
         y: enemy.position.y + totalVy * dt
@@ -392,6 +394,7 @@ export function buildSnapshot(sim, full = false) {
   for (const p of sim.players.values()) {
     snapshot.players[p.id] = {
       position: [p.position.x, p.position.y],
+      velocity: [p.velocity.x, p.velocity.y],
       aim: [p.aim.x, p.aim.y],
       health: p.health,
       alive: p.alive,
@@ -400,7 +403,7 @@ export function buildSnapshot(sim, full = false) {
     };
   }
   for (const e of sim.enemies.values()) {
-    snapshot.enemies[e.id] = { position: [e.position.x, e.position.y], type: e.type, hp: e.hp, maxHp: e.maxHp };
+    snapshot.enemies[e.id] = { position: [e.position.x, e.position.y], velocity: [e.vx || 0, e.vy || 0], type: e.type, hp: e.hp, maxHp: e.maxHp };
   }
   for (const proj of sim.projectiles) {
     snapshot.projectiles[proj.id] = {
@@ -468,6 +471,9 @@ function entityChanged(a, b) {
   const posChanged =
     Math.abs(a.position[0] - b.position[0]) > 1 || Math.abs(a.position[1] - b.position[1]) > 1;
   if (posChanged) return true;
+  if ("velocity" in a && "velocity" in b) {
+    if (Math.abs(a.velocity[0] - b.velocity[0]) > 0.1 || Math.abs(a.velocity[1] - b.velocity[1]) > 0.1) return true;
+  }
   if ("health" in a && a.health !== b.health) return true;
   if ("maxHp" in a && a.hp !== b.hp) return true;
   if ("alive" in a && a.alive !== b.alive) return true;
