@@ -108,7 +108,6 @@ export class Net {
     } catch {
     }
   }
-  }
 
   applySnapshot(snap) {
     this.stateMeta = {
