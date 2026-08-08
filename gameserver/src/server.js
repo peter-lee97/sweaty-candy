@@ -195,63 +195,67 @@ function createClient(ws) {
 }
 
 async function handleMessage(client, data) {
-  let msg;
   try {
-    msg = JSON.parse(data.toString());
-  } catch {
-    return;
-  }
-  if (msg.type === "hello") {
-    if (client.userId) {
-      send(client, { type: "kick", reason: "already joined" });
-      client.ws.close();
+    let msg;
+    try {
+      msg = JSON.parse(data.toString());
+    } catch {
       return;
     }
-    const user = await validatePlayer(msg.token, msg.lobbyId);
-    if (!user) {
-      send(client, { type: "kick", reason: "invalid credentials or lobby" });
-      client.ws.close();
-      return;
-    }
-    if (activeLobbyId && activeLobbyId !== msg.lobbyId) {
-      if (sim.gameOver) {
-        resetServer();
-      } else {
-        send(client, { type: "kick", reason: "this server is already hosting another game" });
+    if (msg.type === "hello") {
+      if (client.userId) {
+        send(client, { type: "kick", reason: "already joined" });
         client.ws.close();
         return;
       }
+      const user = await validatePlayer(msg.token, msg.lobbyId);
+      if (!user) {
+        send(client, { type: "kick", reason: "invalid credentials or lobby" });
+        client.ws.close();
+        return;
+      }
+      if (activeLobbyId && activeLobbyId !== msg.lobbyId) {
+        if (sim.gameOver) {
+          resetServer();
+        } else {
+          send(client, { type: "kick", reason: "this server is already hosting another game" });
+          client.ws.close();
+          return;
+        }
+      }
+      if (sim.playerCount() >= MAX_PLAYERS) {
+        send(client, { type: "kick", reason: "server full" });
+        client.ws.close();
+        return;
+      }
+      if (!activeLobbyId) {
+        activeLobbyId = msg.lobbyId;
+      }
+      lastPlayerActivity = Date.now();
+      client.lobbyId = msg.lobbyId;
+      client.userId = user.id;
+      client.username = user.username;
+      sim.addPlayer(user.id, user.username);
+      roster.set(user.id, user.username);
+      console.log(`Player ${user.username} (${user.id}) connected`);
+      send(client, { type: "welcome", playerId: user.id, players: Object.fromEntries(roster) });
+      broadcastFull();
+    } else if (msg.type === "intent") {
+      if (!client.userId) return;
+      lastPlayerActivity = Date.now();
+      const now = performance.now();
+      if (now - client.intentWindowStart > 1000) {
+        client.intentWindowStart = now;
+        client.intentCount = 0;
+      }
+      if (client.intentCount >= 120) return;
+      client.intentCount++;
+      sim.submitIntent(client.userId, msg);
+    } else if (msg.type === "ping") {
+      send(client, { type: "pong", t: msg.t });
     }
-    if (sim.playerCount() >= MAX_PLAYERS) {
-      send(client, { type: "kick", reason: "server full" });
-      client.ws.close();
-      return;
-    }
-    if (!activeLobbyId) {
-      activeLobbyId = msg.lobbyId;
-    }
-    lastPlayerActivity = Date.now();
-    client.lobbyId = msg.lobbyId;
-    client.userId = user.id;
-    client.username = user.username;
-    sim.addPlayer(user.id, user.username);
-    roster.set(user.id, user.username);
-    console.log(`Player ${user.username} (${user.id}) connected`);
-    send(client, { type: "welcome", playerId: user.id, players: Object.fromEntries(roster) });
-    broadcastFull();
-  } else if (msg.type === "intent") {
-    if (!client.userId) return;
-    lastPlayerActivity = Date.now();
-    const now = performance.now();
-    if (now - client.intentWindowStart > 1000) {
-      client.intentWindowStart = now;
-      client.intentCount = 0;
-    }
-    if (client.intentCount >= 120) return;
-    client.intentCount++;
-    sim.submitIntent(client.userId, msg);
-  } else if (msg.type === "ping") {
-    send(client, { type: "pong", t: msg.t });
+  } catch (error) {
+    console.error(`Error handling message from ${client.username || 'unknown'}:`, error.message);
   }
 }
 
@@ -282,7 +286,7 @@ const server = http.createServer((req, res) => {
   res.end(JSON.stringify({ error: "not found" }));
 });
 
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ noServer: true, pingInterval: 30000, pingTimeout: 60000 });
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   if (url.pathname !== "/ws") {

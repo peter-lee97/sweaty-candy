@@ -26,6 +26,9 @@ export class Net {
     this.seq = 0;
     this.on = { close: null };
     this.predictionHistory = [];
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
+    this.reconnectDelay = 2000;
   }
 
   connect() {
@@ -46,6 +49,7 @@ export class Net {
           this.myId = msg.playerId;
           this.roster = new Map(Object.entries(msg.players || {}));
           this.connected = true;
+          this.reconnectAttempts = 0;
           resolve(this);
         } else if (msg.type === "snapshot") {
           this.applySnapshot(msg);
@@ -56,14 +60,29 @@ export class Net {
           reject(new Error(msg.reason || "kicked from server"));
         }
       };
-      ws.onerror = () => {
+      ws.onerror = (err) => {
+        console.error("WebSocket error:", err);
         if (!this.connected) reject(new Error("websocket error"));
       };
       ws.onclose = () => {
         this.connected = false;
         this.on.close?.();
+        this.tryReconnect();
       };
     });
+  }
+
+  tryReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.log("Max reconnect attempts reached");
+      return;
+    }
+    this.reconnectAttempts++;
+    const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 4);
+    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    setTimeout(() => {
+      this.connect().catch(() => {});
+    }, delay);
   }
 
   pushRtt(v) {
@@ -82,12 +101,13 @@ export class Net {
   }
 
   close() {
+    this.maxReconnectAttempts = 0;
     this.connected = false;
     try {
       this.ws.close();
     } catch {
-      /* ignore */
     }
+  }
   }
 
   applySnapshot(snap) {
