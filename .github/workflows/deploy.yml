@@ -34,31 +34,27 @@ jobs:
 
       - name: Upload images to server
         run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }} \
+            "mkdir -p /home/dev/docker-images"
           scp -i ~/.ssh/id_rsa backend.tar gameserver.tar ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }}:/home/dev/docker-images/
 
       - name: Load images on server
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }} \
-            "docker load < /home/dev/docker-images/backend.tar && \
+            "mkdir -p /home/dev/docker-images && \
+             docker load < /home/dev/docker-images/backend.tar && \
              docker load < /home/dev/docker-images/gameserver.tar"
-
-      - name: Stop old systemd services
-        run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }} \
-            "sudo systemctl stop sweaty-candy-backend sweaty-candy-server 2>/dev/null || echo 'services not running or already stopped' && \
-             sudo systemctl disable sweaty-candy-backend sweaty-candy-server 2>/dev/null || echo 'services already disabled'"
 
       - name: Copy docker-compose to server
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }} \
-            "mkdir -p /opt/sweaty-candy && \
-             ( [ ! -f /opt/sweaty-candy/docker-compose.prod.yml ] || cp /opt/sweaty-candy/docker-compose.prod.yml /opt/sweaty-candy/docker-compose.prod.yml.bak )"
-          scp -i ~/.ssh/id_rsa docker-compose.prod.yml ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }}:/opt/sweaty-candy/
+            "mkdir -p /home/dev/sweaty-candy"
+          scp -i ~/.ssh/id_rsa docker-compose.prod.yml ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }}:/home/dev/sweaty-candy/
 
       - name: Deploy with Docker Compose
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.MC_PROD_USER }}@${{ secrets.MC_PROD_HOST }} \
-            "docker compose -f /opt/sweaty-candy/docker-compose.prod.yml up -d"
+            "docker compose -f /home/dev/sweaty-candy/docker-compose.prod.yml up -d --force-recreate"
 
       - name: Cleanup server artifacts
         run: |

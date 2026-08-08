@@ -39,3 +39,4 @@ services:
 
 volumes:
   sweaty-data:
+    name: sweaty-data
