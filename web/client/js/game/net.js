@@ -165,4 +165,21 @@ export class Net {
     }
     return { snap: false, error: { x: ex, y: ey }, dist, health: serverHealth };
   }
+
+  reset() {
+    this.connected = false;
+    this.myId = null;
+    this.roster.clear();
+    this.stateMeta = { serverTick: 0, wave: 0, phase: "countdown", phaseTimer: 0, gameOver: false };
+    this.players.clear();
+    this.enemies.clear();
+    this.projectiles.clear();
+    this.pickups.clear();
+    this.history.length = 0;
+    this.serverTickEstimate = 0;
+    this.rtt = 0;
+    this.rttSamples.length = 0;
+    this.seq = 0;
+    this.predictionHistory.length = 0;
+  }
 }

@@ -178,18 +178,27 @@ async function startGame() {
   });
 
   app.game = {
-    stop: () => {
+    stop: async () => {
       if (phaserGame && phaserGame.scene.isActive("GameScene")) {
+        const scene = phaserGame.scene.getScene("GameScene");
+        if (scene && typeof scene.shutdown === "function") {
+          scene.shutdown();
+        }
         phaserGame.scene.stop("GameScene");
       }
       net.close();
+      try {
+        await api.leaveLobby(lobby.id, app.auth.token);
+      } catch {
+      }
     }
   };
 
   const onEnd = () => {
     if (app.game) {
-      app.game.stop();
-      app.game = null;
+      app.game.stop().then(() => {
+        app.game = null;
+      });
     }
     hideGameCanvas();
     window.gameHUD?.hide();
@@ -206,8 +215,22 @@ async function startGame() {
 
 document.getElementById("btn-gameover-back").addEventListener("click", () => {
   if (app.game) {
-    app.game.stop();
-    app.game = null;
+    app.game.stop().then(() => {
+      app.game = null;
+    });
+  }
+  app.currentLobby = null;
+  hideGameCanvas();
+  window.gameHUD?.hide();
+  window.gameHUD?.hideGameOver();
+  app.showLobbyScreen();
+});
+
+document.getElementById("btn-exit-game")?.addEventListener("click", () => {
+  if (app.game) {
+    app.game.stop().then(() => {
+      app.game = null;
+    });
   }
   app.currentLobby = null;
   hideGameCanvas();

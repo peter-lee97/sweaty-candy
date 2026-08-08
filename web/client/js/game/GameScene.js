@@ -259,4 +259,24 @@ export class GameScene extends Phaser.Scene {
   burst(pos, color, count, speed) {
     this.particleManager.burst(pos, color, count, speed);
   }
+
+  shutdown() {
+    this.net?.reset();
+    this.localTick = 0;
+    this.acc = 0;
+    this.predictedPos = { x: 0, y: 0 };
+    this.facing = { x: 0, y: 1 };
+    this.myHealth = 100;
+    this.myAlive = true;
+    this.myRespawn = 0;
+    this.correction = null;
+    this.lastPing = 0;
+    this.ghosts = [];
+    this.shotsFired = 0;
+    this.gameOverShown = false;
+    this.isoRenderer = null;
+    this.inputManager = null;
+    this.entityManager = null;
+    this.particleManager = null;
+  }
 }

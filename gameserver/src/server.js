@@ -13,12 +13,17 @@ const ADVERTISED_PORT = Number(process.env.ADVERTISED_PORT || LISTEN_PORT);
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS || 4);
 const HEARTBEAT_SEC = 10;
 const REGISTER_RETRY_SEC = 3;
+const IDLE_WARNING_SEC = 300;
+const IDLE_EXIT_SEC = 1800;
 
 const sim = new GameSim();
 const roster = new Map();
 const clients = new Map();
 let myServerId = null;
 let activeLobbyId = null;
+let heartbeatIntervalId = null;
+let idleCheckIntervalId = null;
+let lastPlayerActivity = Date.now();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -77,13 +82,29 @@ async function startRegistration() {
       await sleep(REGISTER_RETRY_SEC * 1000);
     }
   }
-  setInterval(async () => {
+  heartbeatIntervalId =   setInterval(async () => {
     try {
       await backendRequest(`/v1/servers/${myServerId}/heartbeat`, { method: "POST" });
     } catch (error) {
       console.error(`Heartbeat failed: ${error.message}`);
     }
   }, HEARTBEAT_SEC * 1000);
+  startIdleCheck();
+}
+
+function startIdleCheck() {
+  idleCheckIntervalId = setInterval(() => {
+    const now = Date.now();
+    const idleSeconds = (now - lastPlayerActivity) / 1000;
+    if (sim.playerCount() === 0) {
+      if (idleSeconds >= IDLE_EXIT_SEC) {
+        console.log(`Server idle for ${Math.floor(idleSeconds)}s, exiting`);
+        process.exit(0);
+      } else if (idleSeconds >= IDLE_WARNING_SEC) {
+        console.warn(`Server idle for ${Math.floor(idleSeconds)}s`);
+      }
+    }
+  }, 60_000);
 }
 
 async function validatePlayer(token, lobbyId) {
@@ -209,6 +230,7 @@ async function handleMessage(client, data) {
     if (!activeLobbyId) {
       activeLobbyId = msg.lobbyId;
     }
+    lastPlayerActivity = Date.now();
     client.lobbyId = msg.lobbyId;
     client.userId = user.id;
     client.username = user.username;
@@ -219,6 +241,7 @@ async function handleMessage(client, data) {
     broadcastFull();
   } else if (msg.type === "intent") {
     if (!client.userId) return;
+    lastPlayerActivity = Date.now();
     const now = performance.now();
     if (now - client.intentWindowStart > 1000) {
       client.intentWindowStart = now;
@@ -289,5 +312,7 @@ gameLoop();
 
 process.on("SIGINT", () => {
   console.log("Shutting down game server");
+  if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
+  if (idleCheckIntervalId) clearInterval(idleCheckIntervalId);
   process.exit(0);
 });

@@ -329,6 +329,34 @@ input:focus, select:focus {
 .ping.fair { color: #ffd24d; }
 .ping.poor { color: #ff5d5d; }
 
+#hud-top-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-exit {
+  pointer-events: auto;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(22, 22, 30, 0.8);
+  border: 1px solid #2f2f3d;
+  color: #e8e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease-out;
+}
+
+.btn-exit:hover {
+  background: rgba(255, 93, 93, 0.2);
+  border-color: #ff5d5d;
+  color: #ff9d9d;
+}
+
+.btn-exit:active {
+  transform: scale(0.95);
+}
+
 #hud-bottom-center {
   position: absolute;
   bottom: 22px;

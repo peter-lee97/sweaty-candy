@@ -52,9 +52,13 @@ const DEFAULT_PORT = Number(process.env.PORT || 8787);
 const DEFAULT_HOST = process.env.HOST || "0.0.0.0";
 const SERVER_TTL_MS = 60_000;
 const GUEST_SESSION_DURATION_MS = Number(process.env.GUEST_SESSION_DURATION_MS || 7200000);
+const CLEANUP_INTERVAL_MS = 60_000;
+const STALE_SERVER_AGE_MS = SERVER_TTL_MS * 2;
+const STALE_LOBBY_AGE_MS = 30 * 60_000;
 let runningServer = null;
 let runningWebSocketServer = null;
 const websocketClients = new Set();
+let cleanupIntervalId = null;
 
 function json(res, status, payload) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -483,6 +487,7 @@ export async function startBackendServer(options = {}) {
   });
   runningServer = server;
   runningWebSocketServer = websocketServer;
+  cleanupIntervalId = setInterval(runAllCleanup, CLEANUP_INTERVAL_MS);
   const address = server.address();
   return {
     server,
@@ -494,6 +499,10 @@ export async function startBackendServer(options = {}) {
 export async function stopBackendServer() {
   if (!runningServer) {
     return;
+  }
+  if (cleanupIntervalId) {
+    clearInterval(cleanupIntervalId);
+    cleanupIntervalId = null;
   }
   for (const socket of websocketClients) {
     socket.close();
@@ -540,12 +549,65 @@ function cleanupExpiredGuestSessions() {
   }
 }
 
-if (isDirectExecution()) {
+function cleanupStaleTokens() {
+  const store = readStore();
+  const userIds = new Set(store.users.map((u) => u.id));
+  let cleanedCount = 0;
+  for (const [token, userId] of Object.entries(store.tokens)) {
+    if (!userIds.has(userId)) {
+      delete store.tokens[token];
+      cleanedCount++;
+    }
+  }
+  if (cleanedCount > 0) {
+    writeStore(store);
+    console.log(`Cleaned up ${cleanedCount} stale tokens`);
+  }
+}
+
+function cleanupStaleServers() {
+  const store = readStore();
+  const now = Date.now();
+  const beforeCount = store.servers.length;
+  store.servers = store.servers.filter((s) => now - s.lastHeartbeatAt < STALE_SERVER_AGE_MS);
+  const cleanedCount = beforeCount - store.servers.length;
+  if (cleanedCount > 0) {
+    writeStore(store);
+    console.log(`Cleaned up ${cleanedCount} stale game servers`);
+  }
+}
+
+function cleanupStaleLobbies() {
+  const store = readStore();
+  const now = Date.now();
+  const beforeCount = store.lobbies.length;
+  store.lobbies = store.lobbies.filter((lobby) => {
+    if (lobby.state === "Started") {
+      return now - lobby.createdAt < STALE_LOBBY_AGE_MS;
+    }
+    return true;
+  });
+  const cleanedCount = beforeCount - store.lobbies.length;
+  if (cleanedCount > 0) {
+    writeStore(store);
+    console.log(`Cleaned up ${cleanedCount} stale lobbies`);
+  }
+}
+
+function runAllCleanup() {
   cleanupExpiredGuestSessions();
+  cleanupStaleTokens();
+  cleanupStaleServers();
+  cleanupStaleLobbies();
+}
+
+if (isDirectExecution()) {
+  runAllCleanup();
   startBackendServer()
     .then(({ host, port }) => {
       console.log(`Backend listening on http://${host}:${port}`);
       console.log(`Guest session duration: ${GUEST_SESSION_DURATION_MS / 1000 / 60} minutes`);
+      console.log(`Cleanup interval: ${CLEANUP_INTERVAL_MS / 1000}s`);
     })
     .catch((error) => {
       console.error(`Failed to start backend: ${error.message}`);
