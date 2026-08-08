@@ -3,23 +3,23 @@ WORKDIR /app
 
 FROM base AS build
 RUN apk add --no-cache curl
-COPY backend/package*.json ./
-RUN npm ci --omit=dev
-COPY backend/src ./src
+COPY backend/package*.json ./backend/
+RUN npm ci --omit=dev --prefix ./backend
+COPY backend/src ./backend/src
 COPY shared ./shared
 COPY web/client ./web/client
-COPY backend/package*.json ./package*.json
+COPY backend/package*.json ./backend/
 
 FROM base AS prod
 WORKDIR /app
 RUN apk add --no-cache curl
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/src ./src
+COPY --from=build /app/backend/node_modules ./backend/node_modules
+COPY --from=build /app/backend/src ./backend/src
 COPY --from=build /app/shared ./shared
 COPY --from=build /app/web ./web
-COPY --from=build /app/package*.json ./
+COPY --from=build /app/backend/package*.json ./backend/
 ENV NODE_ENV=production
 ENV PORT=8787
 ENV HOST=0.0.0.0
 EXPOSE 8787
-CMD ["node", "src/app.js"]
+CMD ["node", "backend/src/app.js"]
