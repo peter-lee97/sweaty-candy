@@ -163,6 +163,9 @@ function clientIntervalTicks(client) {
 function sendSnapshots() {
   const full = buildSnapshot(sim, true);
   full.usernames = Object.fromEntries(roster);
+  if (sim.tick % Math.round(R.tickRate) === 0) {
+    console.log(`DEBUG tick=${sim.tick} phase=${sim.phase} phaseTimer=${sim.phaseTimer.toFixed(2)} wave=${sim.wave} clients=${clients.size}`);
+  }
   for (const client of clients.values()) {
     if (!client.userId) continue;
     if (sim.tick - client.lastSendTick < clientIntervalTicks(client)) continue;
