@@ -28,11 +28,12 @@ let lastPlayerActivity = Date.now();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let lastTick = performance.now();
+let accumulator = 0;
 const tickDelta = 1000 / R.tickRate;
 
 function gameLoop() {
   const now = performance.now();
-  let accumulator = now - lastTick;
+  accumulator += now - lastTick;
   lastTick = now;
   if (accumulator > 500) accumulator = 500;
   while (accumulator >= tickDelta) {
@@ -163,9 +164,6 @@ function clientIntervalTicks(client) {
 function sendSnapshots() {
   const full = buildSnapshot(sim, true);
   full.usernames = Object.fromEntries(roster);
-  if (sim.tick % Math.round(R.tickRate) === 0) {
-    console.log(`DEBUG tick=${sim.tick} phase=${sim.phase} phaseTimer=${sim.phaseTimer.toFixed(2)} wave=${sim.wave} clients=${clients.size}`);
-  }
   for (const client of clients.values()) {
     if (!client.userId) continue;
     if (sim.tick - client.lastSendTick < clientIntervalTicks(client)) continue;
