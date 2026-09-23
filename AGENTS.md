@@ -1,57 +1,44 @@
 # AGENTS.md — Sweaty Candy
 
 Boxhead-inspired isometric multiplayer horde shooter, rewritten as a web app (HTML/JS + Phaser 4.2.1, no Godot).
-Authoritative game server in Node.js.
+Authoritative game server: Nakama (Go) running a TypeScript match handler at 60Hz.
 Game logic is 2D top-down; only rendering is isometric (2:1 diamond projection).
 Shapes and colors identify entities instead of sprites.
 Desktop uses mouse + keyboard; mobile web uses virtual twin-sticks.
 
 ## Architecture
 
-Four components:
-
-- **`web/client/`** — Browser client. Vanilla JS ES modules + Phaser 4.2.1 (WebGL), no build step.
-- **`gameserver/`** — Node.js authoritative game server (`ws`). Replaces the old Godot headless server.
-- **`backend/`** — Node.js auth, lobby, and server registry (reused from the Godot era). Serves the client statically.
-- **`shared/game.js`** — Single source of truth for gameplay constants, map, obstacles, and pure helpers. Imported by both the browser client (`/shared/game.js`) and the game server (`../../shared/game.js`).
+- **`web/client/`** — Browser client. Vanilla JS ES modules + Phaser 4.2.1 (WebGL), no build step. Talks to Nakama via `@heroiclabs/nakama-js` (vendored at `web/client/vendor/`).
+- **`nakama-server/`** — Nakama + Postgres stack. `docker-compose-postgres.yml` for dev, `runtime/` holds the TypeScript runtime (RPC + authoritative match handler) built with esbuild to `modules/build/index.js`. `sim.js` (the 60Hz sim) lives in `runtime/src/`.
+- **`web/server.js`** — Tiny Node static server (serves `web/client/` + `/shared/` + `/health` on 8787). Replaces the old backend static serving.
+- **`shared/game.js`** — Single source of truth for gameplay constants, map, obstacles, and pure helpers. Imported by the browser client (`/shared/game.js`) and the Nakama runtime (`../../../shared/game.js`).
+- **`Dockerfile.nakama`** / **`Dockerfile.static`** / **`docker-compose.prod.yml`** — Production images + compose (Nakama + Postgres + static).
 
 Key rule: **clients are never authoritative**. Input → intent → server validates → state change.
 Input never directly mutates position/health on the network path.
 
 ## Authentication
 
-Credential-less guest-first auth. Users land on main menu and can play immediately.
+Credential-less guest-first auth via Nakama custom auth. Users land on main menu and can play immediately.
 
 - No passwords. Optional display name (3-20 chars: letters, numbers, space, underscore); auto-generated `fruit+color+number` if skipped.
-- Guest session: 2-hour configurable lifetime (`GUEST_SESSION_DURATION_MS` env var, default 7200000ms). Stored in `localStorage` under key `sweaty.auth.v1` (`{ userId, username, token }`).
-- Username collision check against both `store.users` and active `guestSessions`.
-- The menu pre-fills the current identity. The name field only applies when no valid token exists (re-validate via `GET /v1/auth/me` first).
-- Guest sessions can be refreshed via `POST /v1/auth/refresh` (client does not currently auto-refresh).
-- Logout: not yet implemented in the UI. Clearing `sweaty.auth.v1` from localStorage logs out.
+- Guest identity = a stable device id (`crypto.randomUUID`) stored in `localStorage` under `sweaty.device.v1`; the account is created with `authenticateCustom(deviceId, create=true, username)`.
+- Session (token + refresh token) stored in `localStorage` under key `sweaty.auth.v1` (`{ userId, username, token, refreshToken, createTime, expireTime }`). Token expiry `7200s`, refresh `604800s` (Nakama config).
+- The menu pre-fills the current identity. The name field only applies when no valid token exists (`ensureIdentity` in `web/client/js/nakama.js` restores/refreshes an existing session first).
+- Sessions are refreshed with `client.sessionRefresh(session)` when near expiry.
+- Logout: not yet implemented in the UI. Clearing `sweaty.auth.v1` + `sweaty.device.v1` from localStorage logs out.
 
-### Auth Endpoints
+### Nakama API (replaces the old REST backend)
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/v1/auth/register` | No | Create account with custom username + password (min 6 chars) |
-| POST | `/v1/auth/login` | No | Login with username + password |
-| POST | `/v1/auth/guest` | No | Create guest session; optional `username` field (credential-less) |
-| POST | `/v1/auth/refresh` | Yes | Extend guest session (only for guests) |
-| GET | `/v1/auth/me` | Yes | Get current user info |
-
-### Auth Store Structure
-
-```js
-{
-  users: [{ id, username, passwordHash?, createdAt }],
-  tokens: { [token]: userId },
-  guestSessions: { [guestId]: { createdAt, expiresAt, username } },
-  lobbies: [...],
-  servers: [...]
-}
-```
-
-Backend persists state in SQLite at `backend/data/store.db` (see `backend/src/store.js`).
+| Operation | Nakama call |
+|---|---|
+| Guest sign in | `client.authenticateCustom(deviceId, true, username)` |
+| Restore session | `Session.restore(token, refreshToken)` |
+| Refresh session | `client.sessionRefresh(session)` |
+| Create room | `client.rpc(session, "create_room", { name, password, maxPlayers })` |
+| List rooms | `client.listMatches(session, 50, true, "", 0, 8, "+label.game:sweaty-candy +label.state:waiting")` |
+| Join / leave | `socket.joinMatch(matchId, undefined, { password })` / `socket.leaveMatch(matchId)` |
+| Game messages | `socket.sendMatchState(matchId, opCode, JSON)` + `socket.onmatchdata` |
 
 ## Project Layout
 
@@ -60,40 +47,38 @@ shared/
   game.js                # CONFIG, ENEMY_TYPES, MAP, wave/difficulty formulas, collision helpers
 
 web/client/
-  index.html             # Single page: screens + canvas + HUD + touch sticks
+  index.html             # Single page: screens + canvas + HUD + touch sticks + importmap
   css/style.css
+  vendor/nakama-js.esm.mjs   # @heroiclabs/nakama-js SDK (vendored, no build step)
   js/
-    main.js              # Boot, auth state, screen routing, lobby WS wiring
-    auth.js              # localStorage token helpers
-    api.js               # REST + lobby events WebSocket client
+    main.js              # Boot, auth state, screen routing, Nakama socket wiring
+    auth.js              # localStorage session helpers
+    nakama.js            # Nakama client: auth, session refresh, rooms, socket, OP codes
     screens/
       manager.js         # setScreen(app, name) toggles menu/lobby/waiting + tracks app.screen
       menu.js, lobby.js, waiting.js
     game/
       GameScene.js         # Phaser scene orchestration: game loop, prediction, interpolation, FX
-      net.js               # Game WS: intents out, snapshots in, prediction history, RTT
+      net.js               # Nakama socket transport: intents out, snapshots in, prediction history, RTT
       InputManager.js      # WASD/mouse + touch twin-sticks
       IsometricRenderer.js # Phaser-based isometric renderer (2:1 diamond projection)
       EntityManager.js     # Entity state management (players, enemies, projectiles, pickups)
       ParticleManager.js   # Visual effects (hit flash, death particles, FX)
       hud.js               # Health bar, banner, ping, player list, game-over overlay
 
-gameserver/
-  package.json
-  src/
-    server.js            # ws endpoint, backend registration + heartbeat, lobby validation
-    sim.js               # 60Hz simulation + snapshot building (full/delta)
+nakama-server/
+  docker-compose-postgres.yml  # Dev: Nakama + Postgres (7350/7351, mounts repo into /nakama/data)
+  runtime/
+    package.json, tsconfig.json, src/nkruntime.d.ts
+    src/main.ts            # InitModule: registers create_room RPC + sweaty_candy match handler
+    src/match.ts           # Authoritative match handler + RPC (port of the old game server)
+    src/sim.js             # 60Hz simulation + snapshot building (full/delta), unchanged from old gameserver
+  modules/build/index.js   # esbuild output (gitignored), loaded via --runtime.js_entrypoint
 
-backend/
-  src/
-    app.js               # HTTP server: API + static file serving (web/client + shared/)
-    auth.js              # Password hashing, token generation, guest ID/username generation
-    store.js             # SQLite-backed key-value store
-  package.json
-
-client/  server/          # Legacy Godot projects, kept for reference only (no longer run)
-tools/Caddyfile.local     # Optional local HTTPS/proxy config
-dev.sh                    # Starts backend + game server
+web/server.js              # Tiny Node static server (web/client + /shared, port 8787)
+client/  server/           # Legacy Godot projects, kept for reference only (no longer run)
+tools/Caddyfile.local      # Optional local proxy: /v2/* → 7350, else → 8787
+dev.sh                     # Builds runtime, starts Nakama compose, starts static server
 ```
 
 ## Phaser Setup
@@ -111,8 +96,8 @@ The client uses Phaser 4.2.1 via CDN with an importmap for ES module loading:
 Menu → (auth) → Main Lobby → Waiting Room → Game → Game Over → back to Lobby.
 
 - Menu: optional display name + Play.
-- Main Lobby: live room table via WS events, Create Room modal (name, optional password, max players), Refresh, Back.
-- Waiting Room: player list with owner tag, Start (owner only), Leave. Live-updates via WS; auto-starts the game when the lobby flips to Started.
+- Main Lobby: room table polled every 2.5s via Nakama match listing, Create Room modal (name, optional password, max players), Refresh, Back.
+- Waiting Room: player list with owner tag, Start (owner only), Leave. Driven by `OP.ROOMINFO` broadcasts; auto-starts the game on `OP_START`.
 - Game Over: survived levels + shots fired, Back to Lobby.
 
 ## Rendering (Isometric)
@@ -152,34 +137,36 @@ Menu → (auth) → Main Lobby → Waiting Room → Game → Game Over → back 
 2. Main Lobby → Create Room / Join Room → Waiting Room
 3. Waiting Room → Start (owner) → auto-connect to Game Server
 
-### Lobby Endpoints
+### Nakama Match (`nakama-server/runtime/src/match.ts`)
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/v1/lobbies` | No | List all lobbies |
-| POST | `/v1/lobbies` | Yes | Create lobby (auto-joins as owner) |
-| POST | `/v1/lobbies/:id/join` | Yes | Join lobby (password required for private) |
-| POST | `/v1/lobbies/:id/leave` | Yes | Leave lobby (auto-deletes if empty, reassigns owner) |
-| POST | `/v1/lobbies/:id/start` | Yes | Start lobby (owner only, assigns game server) |
-| WS | `/v1/lobbies/events?token=...` | Yes | Real-time lobby updates |
+A single authoritative match handler `sweaty_candy` runs the lobby phase and the game
+in the same match. It is created by the `create_room` RPC with `{ name, password, maxPlayers, ownerId }`.
 
-Lobby payloads include `players: [{ id, username }]` (used by the waiting room).
+- **matchInit** → state `{ matchKey, phase: "waiting", room, started, presences, baseline }`, tick rate 60, label JSON `{ game, state, name, private, maxPlayers, owner }`.
+- **matchJoinAttempt** → rejects when the game already started, when full, or on wrong lobby password (passed via join `metadata`).
+- **matchJoin / matchLeave** → track presences, broadcast `OP.ROOMINFO` (player list + owner), reassign owner if the owner leaves while waiting.
+- **matchLoop** (60Hz):
+  - waiting phase: `OP_START` from the owner starts the sim, adds all presences as players, updates the label to `state:"started"`, broadcasts `OP_START`.
+  - game phase: `OP_INTENT` → `sim.submitIntent`; `OP_PING` → echo `OP_PONG`; then `sim.step(1/60)`; every 2nd tick broadcast a delta `OP_SNAPSHOT` (full first).
+  - terminates when the match has no presences (or after 30s idle in waiting).
+- **State round-trip**: Nakama exports match state to Go between callbacks, so state must be plain data. **Never store class instances or `Map`s in match state.** The `GameSim` lives in a module-level `Map` keyed by `state.matchKey` (each match has its own goja runtime, so the registry is per-match).
 
-### Server Registration
+### Opcodes
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/v1/servers/register` | No | Register game server |
-| POST | `/v1/servers/:id/heartbeat` | No | Server heartbeat (10s interval, 60s TTL) |
-| GET | `/v1/servers` | No | List active servers |
+| Op | Name | Direction |
+|----|------|-----------|
+| 1 | `INTENT` | client → server (`{ tick, move, aim, shoot, localSeq }`) |
+| 2 | `PING` / `PONG` | client ↔ server (`{ t }`) |
+| 4 | `SNAPSHOT` | server → client (JSON, full first then deltas) |
+| 5 | `START` | server → all (game started) |
+| 6 | `GAMEOVER` | server → all (reliable) |
+| 7 | `ROOMINFO` | server → all (waiting-room player list + owner) |
 
-### Game Server (`gameserver/`)
+### Game Server Behaviour
 
-- Authoritative simulation on a fixed 60Hz timestep (`setInterval`, one `sim.step(1/60)` per tick).
-- One game per server instance: first connecting lobby claims the server; other lobbies are rejected with a kick.
-- Per-player intent queue (cap 16, drops oldest); hold-last idle policy; 120 intents/s rate limit.
-- Clients validated via backend `GET /v1/auth/me` + lobby must be `Started` and assigned to this server id.
-- Snapshots: 30Hz default, adaptive 20/15Hz for RTT > 100/200ms. Full sync every 1s; otherwise delta sync (changed entities + removed lists).
+- Authoritative simulation on a fixed 60Hz tick (`match_loop` at tick rate 60, `sim.step(1/60)`).
+- Per-player intent queue in the sim (cap 16, drops oldest); hold-last idle policy; per-tick intent cap (10/user).
+- Snapshots: 30Hz (every 2nd tick). Full sync on the first snapshot after start; otherwise delta sync (changed entities + removed lists).
 - Payloads are JSON. Snapshot shape:
 
 ```json
@@ -198,6 +185,7 @@ Lobby payloads include `players: [{ id, username }]` (used by the waiting room).
 
 ### Client Networking
 
+- Transport is the Nakama socket (`socket.sendMatchState(matchId, opCode, JSON)` / `socket.onmatchdata`), decoded by `net.js`. Intents and pings go out as match messages; snapshots/pongs come back the same way.
 - Local player: prediction + reconciliation. Prediction history keyed by input tick (cap 60). Error blended over 120ms; hard snap beyond 60px.
 - Remote entities: snapshot buffer (cap 12) interpolated at 150ms render delay; render tick = server tick estimate - 9 ticks.
 - Ghost projectiles: local shot feedback keyed by `localSeq`, dropped when the server projectile arrives, expire after 500ms.
@@ -213,10 +201,10 @@ Lobby payloads include `players: [{ id, username }]` (used by the waiting room).
 ## Commands
 
 ```bash
-./dev.sh                          # Start backend (8787) + game server (7777); open http://127.0.0.1:8787
-cd backend && npm start           # Backend only
-cd gameserver && npm start        # Game server only
-GUEST_SESSION_DURATION_MS=3600000 npm start  # Backend with 1h guest sessions
+./dev.sh                          # Build runtime, start Nakama compose + static server (8787); open http://127.0.0.1:8787
+cd nakama-server/runtime && npm run build    # Rebuild the Nakama runtime bundle (esbuild → modules/build/index.js)
+docker compose -f nakama-server/docker-compose-postgres.yml up -d   # Start Nakama + Postgres only
+docker logs -f nakama             # Nakama logs
 ```
 
 For local multiplayer testing use two different origins so localStorage identities stay isolated,
@@ -224,26 +212,29 @@ e.g. one tab at `http://127.0.0.1:8787` and one at `http://localhost:8787`.
 
 ## JS Conventions
 
-- ES modules everywhere; browser client imports absolute `/shared/game.js`, game server imports `../../shared/game.js`.
-- Phaser 4.2.1 framework (loaded via CDN), no build step, no bundler.
-- Static typing not available; name variables/params clearly.
+- ES modules everywhere; browser client imports absolute `/shared/game.js`, the Nakama runtime imports `../../../shared/game.js` and is bundled with esbuild (format `cjs`, no exports in `main.ts`).
+- Phaser 4.2.1 framework (loaded via CDN), no build step, no bundler on the client.
+- Static typing not available in the client; name variables/params clearly.
 - No comments in code unless explicitly requested.
 - Pure data/helpers live in `shared/game.js`; no DOM or Node imports there.
 - DOM element access via `document.getElementById` with ids defined once in `index.html`.
-- `app` object in `main.js` holds cross-screen state (auth, currentLobby, lobbyWs, game) and is exposed as `window.__app` for debugging.
+- `app` object in `main.js` holds cross-screen state (auth, session, socket, currentRoom, game) and is exposed as `window.__app` for debugging.
+- Nakama runtime: `main.ts` must register `InitModule` as a top-level `function` (the goja AST parser rejects arrow functions and bundler wrappers); the runtime bundle is loaded via `--runtime.js_entrypoint build/index.js`.
 
 ## Common Pitfalls
 
 - **Same-origin localStorage**: two browser tabs on the same origin share the same identity. Use different origins (127.0.0.1 vs localhost) for multi-client local tests.
 - **`app.screen` must be set via `setScreen(app, name)`** in `screens/manager.js`; the waiting room live-update and auto-start logic branches on it.
-- **Lobby WS lifecycle**: connect once when entering the Main Lobby (`showLobbyScreen`). Keep it open through the waiting room; it drives both the room list and the auto-start.
-- **Name field only applies to new sessions**: the menu re-validates an existing stored token and keeps it; clearing `sweaty.auth.v1` + reload is how to switch identity.
+- **Socket lifecycle**: connect the Nakama socket once when entering the Main Lobby (`showLobbyScreen`). Keep it open through the waiting room; it drives both the room list and the game transport.
+- **Join-time `ROOMINFO` can arrive before the waiting screen**: `main.js` buffers the latest room info and seeds `app.currentRoom` in `enterWaiting`, so the player list is never empty.
+- **Name field only applies to new sessions**: the menu re-validates an existing stored token and keeps it; clearing `sweaty.auth.v1` + `sweaty.device.v1` + reload is how to switch identity.
 - **Never send `shoot` when dead**: the client gates firing on `myAlive`; the server ignores intent movement for dead players.
 - **Snapshot `type` field is required**: `buildSnapshot`/`deltaFrom` must set `type: "snapshot"` or the client ignores the message.
-- **One game per server**: a game server rejects clients whose lobby differs from the active one. Backend `pickServer` spreads load but each server instance is single-game.
+- **Match state round-trips through Go**: only store plain data in match state; `GameSim` instances and `Map`s must live outside it (module-level registry keyed by `state.matchKey`).
+- **Runtime bundle must expose `InitModule` at the top level**: `main.ts` uses `function InitModule(...)` (not an arrow) and no `export`; esbuild must run with `--format=cjs` and no exported entry symbols.
 - **Server and client must share the same `shared/game.js`**: prediction assumes identical constants/map; drift causes visible snapping.
 - **Solo death = game over**: the sim freezes when every player is dead (`gameOver`), so respawn only matters with ≥ 2 players.
-- **Obstacles exist server-side too** (unlike the old Godot server): projectiles die on obstacles, players/enemies slide around them via `resolveCircleVsAABB`.
+- **Obstacles exist server-side too**: projectiles die on obstacles, players/enemies slide around them via `resolveCircleVsAABB`.
 
 ## Deployment
 
@@ -251,8 +242,9 @@ See [DEPLOY.md](./DEPLOY.md) for full production deployment instructions.
 
 **Quick reference:**
 - Client: `https://shoot.compilechicken.com` (auto-detects backend URL from `window.location.origin`)
-- Backend: Node.js on `localhost:8787` (systemd `sweaty-candy-backend`), serves the client + `/shared/*`
-- Game server: Node.js on port 7777, proxied through Caddy at `wss://game.compilechicken.com` (systemd `sweaty-candy-server`)
-- Game server env: `BACKEND_BASE_URL`, `ADVERTISED_HOST`, `ADVERTISED_PORT`, `LISTEN_PORT`, `MAX_PLAYERS`
+- Nakama: Docker on `127.0.0.1:7350` (Caddy proxies `/v2/*`), console on `127.0.0.1:7351` (internal)
+- Static client: Node.js on `127.0.0.1:8787` (Caddy proxies the rest), serves `web/client` + `/shared/*`
+- Deploy: GitHub Actions builds `Dockerfile.nakama` + `Dockerfile.static` and runs `docker compose -f docker-compose.prod.yml up -d --force-recreate`
+- Prod env: `POSTGRES_PASSWORD`, `NAKAMA_SERVER_KEY`, `NAKAMA_ENCRYPTION_KEY`, `NAKAMA_HTTP_KEY`, `CONSOLE_USERNAME`, `CONSOLE_PASSWORD`
 - Caddy on host (not Docker), imports from `/etc/caddy/sites-enabled/*`
-- Game WebSocket via TLS: Caddy proxies `game.compilechicken.com:443` → `localhost:7777`
+- Nakama WebSocket via TLS: Caddy proxies `shoot.compilechicken.com/v2/*` → `127.0.0.1:7350`

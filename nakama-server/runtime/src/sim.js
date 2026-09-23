@@ -8,8 +8,9 @@ import {
   waveEnemyTotal,
   waveTypes,
   moveCircle,
+  resolveCircleVsCircle,
   obstaclesBlockSegment
-} from "../../shared/game.js";
+} from "../../../shared/game.js";
 
 const R = CONFIG;
 
@@ -79,8 +80,30 @@ export class GameSim {
     this.updateProjectiles(dt);
     this.updatePickups(dt);
     this.updateRespawns(dt);
+    this.separateBodies();
     if (this.players.size > 0 && [...this.players.values()].every((p) => !p.alive)) {
       this.gameOver = true;
+    }
+  }
+
+  separateBodies() {
+    const enemies = [...this.enemies.values()];
+    const alivePlayers = [...this.players.values()].filter((p) => p.alive);
+    for (const enemy of enemies) {
+      const stopDist = Math.min(enemy.half + R.player.halfExtent, R.enemy.contactRadius) - 1;
+      const minRest = stopDist - enemy.speed * R.tickDelta;
+      for (const p of alivePlayers) {
+        enemy.position = resolveCircleVsCircle(
+          enemy.position.x,
+          enemy.position.y,
+          p.position.x,
+          p.position.y,
+          minRest
+        );
+      }
+    }
+    for (const enemy of enemies) {
+      enemy.position = moveCircle(enemy.position, enemy.half);
     }
   }
 
@@ -287,9 +310,12 @@ export class GameSim {
       if (target) {
         const dx = target.position.x - enemy.position.x;
         const dy = target.position.y - enemy.position.y;
-        const len = Math.hypot(dx, dy) || 1;
-        vx = (dx / len) * enemy.speed;
-        vy = (dy / len) * enemy.speed;
+        const dist = Math.hypot(dx, dy) || 1;
+        const stopDist = Math.min(enemy.half + R.player.halfExtent, R.enemy.contactRadius) - 1;
+        if (dist > stopDist) {
+          vx = (dx / dist) * enemy.speed;
+          vy = (dy / dist) * enemy.speed;
+        }
       }
       const kx = enemy.knockback.x;
       const ky = enemy.knockback.y;

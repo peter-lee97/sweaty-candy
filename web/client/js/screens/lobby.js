@@ -11,34 +11,83 @@ export function initLobby(app) {
   const btnConfirm = document.getElementById("btn-create-confirm");
   const btnCancel = document.getElementById("btn-create-cancel");
   const createStatus = document.getElementById("create-status");
+  const ongoingDetails = document.getElementById("ongoing-details");
+  const ongoingSummary = document.getElementById("ongoing-summary");
+  const ongoingRows = document.getElementById("ongoing-rows");
 
-  function render(lobbies) {
-    const waiting = (lobbies || []).filter((l) => l.state === "Waiting");
+  let pollTimer = null;
+
+  function render(rooms) {
     rowsEl.innerHTML = "";
-    if (waiting.length === 0) {
+    const open = (rooms || []).filter((r) => r.state === "waiting" && r.currentPlayers < r.maxPlayers);
+    const ongoing = (rooms || []).filter((r) => r.state !== "waiting");
+    if (open.length === 0) {
       rowsEl.innerHTML = `<tr class="empty-row"><td colspan="4">No rooms available - create one!</td></tr>`;
-      return;
     }
-    for (const lobby of waiting) {
+    for (const room of open) {
       const tr = document.createElement("tr");
       const name = document.createElement("td");
-      name.textContent = lobby.name;
+      name.textContent = room.name;
       const players = document.createElement("td");
-      players.textContent = `${lobby.currentPlayers}/${lobby.maxPlayers}`;
+      players.textContent = `${room.currentPlayers}/${room.maxPlayers}`;
       const status = document.createElement("td");
-      status.textContent = lobby.isPrivate ? "Private" : "Open";
+      status.textContent = room.private ? "Private" : "Open";
       const actions = document.createElement("td");
       const join = document.createElement("button");
       join.className = "join-btn";
       join.textContent = "Join";
-      join.addEventListener("click", () => app.joinRoom(lobby));
+      join.addEventListener("click", () => app.joinRoom(room));
       actions.appendChild(join);
       tr.append(name, players, status, actions);
       rowsEl.appendChild(tr);
     }
+    ongoingRows.innerHTML = "";
+    if (ongoing.length === 0) {
+      ongoingDetails.classList.add("hidden");
+      return;
+    }
+    for (const room of ongoing) {
+      const tr = document.createElement("tr");
+      const name = document.createElement("td");
+      name.textContent = room.name;
+      const players = document.createElement("td");
+      players.textContent = `${room.currentPlayers}/${room.maxPlayers}`;
+      const status = document.createElement("td");
+      status.className = "ongoing-status";
+      status.textContent = "In Progress";
+      tr.append(name, players, status);
+      ongoingRows.appendChild(tr);
+    }
+    ongoingSummary.textContent = `Ongoing games (${ongoing.length})`;
+    ongoingDetails.classList.remove("hidden");
+  }
+
+  async function tick() {
+    if (!app.session) return;
+    try {
+      const rooms = await app.api.listRooms(app.session);
+      render(rooms);
+      statusEl.textContent = "";
+    } catch (err) {
+      statusEl.textContent = err.message || "Failed to load rooms";
+    }
+  }
+
+  function startPolling() {
+    stopPolling();
+    tick();
+    pollTimer = setInterval(tick, 2500);
+  }
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
   }
 
   app.lobbyRender = render;
+  app.lobbyStartPolling = startPolling;
+  app.lobbyStopPolling = stopPolling;
 
   btnCreate.addEventListener("click", () => {
     modal.classList.remove("hidden");
@@ -51,9 +100,9 @@ export function initLobby(app) {
     const max = Number(document.getElementById("create-max").value);
     createStatus.textContent = "";
     try {
-      const lobby = await app.createRoom(name, pass, max);
+      const room = await app.createRoom(name, pass, max);
       modal.classList.add("hidden");
-      app.enterWaiting(lobby);
+      app.enterWaiting(room);
     } catch (err) {
       createStatus.textContent = err.message || "Create failed";
     }
@@ -61,13 +110,7 @@ export function initLobby(app) {
 
   btnRefresh.addEventListener("click", async () => {
     statusEl.textContent = "Refreshing...";
-    try {
-      const data = await app.api.listLobbies();
-      render(data.lobbies);
-      statusEl.textContent = "";
-    } catch (err) {
-      statusEl.textContent = err.message || "Refresh failed";
-    }
+    await tick();
   });
 
   btnBack.addEventListener("click", () => app.showMenuScreen());
@@ -76,15 +119,5 @@ export function initLobby(app) {
 export function showLobby(app) {
   setScreen(app, "lobby");
   document.getElementById("lobby-user").textContent = `Playing as ${app.auth.username}`;
-  const statusEl = document.getElementById("lobby-status");
-  statusEl.textContent = "Loading rooms...";
-  app.api
-    .listLobbies()
-    .then((data) => {
-      app.lobbyRender(data.lobbies);
-      statusEl.textContent = "";
-    })
-    .catch((err) => {
-      statusEl.textContent = err.message || "Failed to load rooms";
-    });
+  app.lobbyStartPolling?.();
 }

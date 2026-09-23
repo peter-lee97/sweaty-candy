@@ -1,0 +1,11 @@
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY nakama-server/runtime/package*.json ./nakama-server/runtime/
+RUN npm ci --prefix ./nakama-server/runtime
+COPY nakama-server/runtime/tsconfig.json ./nakama-server/runtime/
+COPY nakama-server/runtime/src ./nakama-server/runtime/src
+COPY shared ./shared
+RUN npm run build --prefix ./nakama-server/runtime
+
+FROM heroiclabs/nakama:3.37.0 AS prod
+COPY --from=build /app/nakama-server/modules/build/index.js /nakama/data/modules/build/index.js

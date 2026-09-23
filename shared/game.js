@@ -81,6 +81,19 @@ export function respawnSeconds(wave) {
   return Math.max(CONFIG.respawn.base, Math.min(CONFIG.respawn.max, CONFIG.respawn.base + (wave - 1) * CONFIG.respawn.perWave));
 }
 
+export function resolveCircleVsCircle(px, py, ox, oy, minDist) {
+  let dx = px - ox;
+  let dy = py - oy;
+  const distSq = dx * dx + dy * dy;
+  if (distSq >= minDist * minDist) return { x: px, y: py };
+  if (distSq === 0) {
+    return { x: ox + minDist, y: oy };
+  }
+  const dist = Math.sqrt(distSq);
+  const overlap = minDist - dist;
+  return { x: px + (dx / dist) * overlap, y: py + (dy / dist) * overlap };
+}
+
 export function resolveCircleVsAABB(px, py, radius, box) {
   const minX = box.x - box.w / 2;
   const maxX = box.x + box.w / 2;

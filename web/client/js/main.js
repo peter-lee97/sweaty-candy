@@ -1,5 +1,5 @@
-import { loadAuth, saveAuth, clearAuth } from "./auth.js";
-import * as api from "./api.js";
+import { loadAuth } from "./auth.js";
+import * as nakama from "./nakama.js";
 import { setScreen } from "./screens/manager.js";
 import { initMenu, showMenu } from "./screens/menu.js";
 import { initLobby, showLobby } from "./screens/lobby.js";
@@ -13,104 +13,122 @@ let phaserGame = null;
 
 const app = {
   auth: loadAuth(),
-  api,
-  currentLobby: null,
-  lobbyWs: null,
-  game: null
+  session: null,
+  socket: null,
+  currentRoom: null,
+  latestRoomInfo: null,
+  game: null,
+  api: nakama
 };
 
-async function ensureIdentity(username) {
-  if (app.auth?.token) {
-    try {
-      const me = await api.authMe(app.auth.token);
-      if (me) {
-        app.auth.username = me.username;
-        saveAuth(app.auth);
-        return app.auth;
-      }
-    } catch {
-      clearAuth();
-      app.auth = null;
-    }
-  }
-  const result = await api.guestSignIn(username);
-  const auth = {
-    userId: result.id,
-    username: result.username,
-    token: result.token
-  };
-  saveAuth(auth);
-  app.auth = auth;
-  return auth;
-}
+app.ensureIdentity = (username) => nakama.ensureIdentity(app, username);
 
-app.ensureIdentity = ensureIdentity;
-
-function connectLobbyEvents() {
-  if (app.lobbyWs) return;
-  app.lobbyWs = api.connectLobbyEvents(app.auth.token, {
-    onLobbies: (msg) => handleLobbies(msg.lobbies),
-    onClose: () => {
-      app.lobbyWs = null;
-    }
-  });
-}
-
-function handleLobbies(lobbies) {
-  if (app.currentLobby) {
-    const updated = lobbies.find((l) => l.id === app.currentLobby.id);
-    if (updated) {
-      app.currentLobby = updated;
-      if (updated.state === "Started" && app.screen === "waiting") {
+function wireSocket() {
+  if (!app.socket) return;
+  app.socket.onmatchdata = (md) => {
+    if (md.op_code === nakama.OP.START) {
+      if (app.screen === "waiting" && app.currentRoom) {
         startGame();
-        return;
       }
-      if (app.screen === "waiting") app.waitingRender(updated);
-    } else {
-      app.currentLobby = null;
-      showLobbyScreen();
       return;
     }
-  }
-  if (app.screen === "lobby") app.lobbyRender(lobbies);
+    if (md.op_code === nakama.OP.ROOMINFO) {
+      try {
+        const info = JSON.parse(nakama.decodeData(md.data));
+        app.latestRoomInfo = info;
+        if (app.currentRoom) {
+          app.currentRoom.name = info.name || app.currentRoom.name;
+          app.currentRoom.ownerId = info.ownerId || app.currentRoom.ownerId;
+          app.currentRoom.maxPlayers = info.maxPlayers || app.currentRoom.maxPlayers;
+          app.currentRoom.players = info.players || [];
+        }
+        if (app.screen === "waiting") {
+          app.waitingRender(info);
+        }
+      } catch {
+        /* ignore malformed */
+      }
+      return;
+    }
+    if (app.game && app.game.net) {
+      app.game.net.handleMatchData(md);
+    }
+  };
 }
 
 app.showMenuScreen = () => {
-  app.currentLobby = null;
+  app.currentRoom = null;
+  app.lobbyStopPolling?.();
   hideGameCanvas();
   showMenu(app);
 };
 
-app.showLobbyScreen = () => {
-  connectLobbyEvents();
+app.showLobbyScreen = async () => {
   hideGameCanvas();
+  setScreen(app, "lobby");
+  try {
+    if (!app.socket) {
+      app.socket = await nakama.connectSocket(app.session);
+      wireSocket();
+    }
+  } catch (err) {
+    const status = document.getElementById("lobby-status");
+    if (status) status.textContent = err.message || "Failed to connect";
+  }
   showLobby(app);
 };
 
-app.enterWaiting = (lobby) => {
-  app.currentLobby = lobby;
+app.enterWaiting = (room) => {
+  app.currentRoom = room;
+  if (app.latestRoomInfo) {
+    room.players = app.latestRoomInfo.players || [];
+    room.ownerId = app.latestRoomInfo.ownerId || room.ownerId;
+    room.maxPlayers = app.latestRoomInfo.maxPlayers || room.maxPlayers;
+  }
+  app.lobbyStopPolling?.();
   showWaiting(app);
 };
 
-app.joinRoom = async (lobby) => {
+app.joinRoom = async (room) => {
   let password = "";
-  if (lobby.isPrivate) {
-    password = window.prompt(`Enter password for "${lobby.name}":`) || "";
+  if (room.private) {
+    password = window.prompt(`Enter password for "${room.name}":`) || "";
   }
   try {
-    const joined = await api.joinLobby(lobby.id, password, app.auth.token);
-    app.enterWaiting(joined);
+    const match = await app.socket.joinMatch(room.id, undefined, password ? { password } : {});
+    const label = nakama.roomFromLabel(match.label);
+    app.enterWaiting({
+      matchId: room.id,
+      name: (label && label.name) || room.name,
+      ownerId: label && label.owner,
+      private: room.private,
+      maxPlayers: room.maxPlayers,
+      players: []
+    });
   } catch (err) {
-    if (err.status === 403) {
+    const msg = String((err && (err.message || err.statusText)) || err);
+    if (/password/i.test(msg)) {
       window.alert("Wrong password");
+    } else if (/full/i.test(msg)) {
+      window.alert("Room is full");
     } else {
-      window.alert(err.message || "Join failed");
+      window.alert(msg || "Join failed");
     }
   }
 };
 
 app.createRoom = async (roomName, password, maxPlayers) => {
-  return api.createLobby({ roomName, password, maxPlayers }, app.auth.token);
+  const matchId = await nakama.createRoom(app.session, { name: roomName, password, maxPlayers });
+  const match = await app.socket.joinMatch(matchId, undefined, password ? { password } : {});
+  const label = nakama.roomFromLabel(match.label);
+  return {
+    matchId,
+    name: (label && label.name) || roomName || `Room ${matchId.slice(0, 4)}`,
+    ownerId: label && label.owner,
+    private: !!password,
+    maxPlayers: (label && label.maxPlayers) || maxPlayers,
+    players: []
+  };
 };
 
 function showGameCanvas() {
@@ -122,23 +140,46 @@ function hideGameCanvas() {
   if (c) c.classList.add("hidden");
 }
 
+async function exitToLobby() {
+  if (app.game) {
+    await app.game.stop();
+    app.game = null;
+  }
+  app.currentRoom = null;
+  hideGameCanvas();
+  window.gameHUD?.hide();
+  window.gameHUD?.hideGameOver();
+  app.showLobbyScreen();
+}
+
 async function startGame() {
-  const lobby = app.currentLobby;
-  if (!lobby || !lobby.serverHost) return;
+  const room = app.currentRoom;
+  if (!room) return;
 
   showGameCanvas();
   setScreen(app, "game");
 
-  const wsUrl = lobby.serverPort === 443 ? `wss://${lobby.serverHost}` : `ws://${lobby.serverHost}:${lobby.serverPort}`;
-  const net = new Net(`${wsUrl}/ws`, app.auth.token, lobby.id);
+  const net = new Net({ socket: app.socket, matchId: room.matchId, session: app.session });
+  net.onEnd = () => exitToLobby();
+  app.game = {
+    net,
+    stop: async () => {
+      net.close();
+      try {
+        await app.socket.leaveMatch(room.matchId);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
 
   try {
-    await net.connect();
-  } catch (err) {
-    window.alert(`Could not join game: ${err.message}`);
-    hideGameCanvas();
-    app.showLobbyScreen();
-    return;
+    await Promise.race([
+      net.ready,
+      new Promise((resolve) => setTimeout(resolve, 4000))
+    ]);
+  } catch {
+    /* ignore timeout */
   }
 
   if (!window.gameHUD) {
@@ -177,66 +218,18 @@ async function startGame() {
     myUsername: app.auth.username
   });
 
-  app.game = {
-    stop: async () => {
-      if (phaserGame && phaserGame.scene.isActive("GameScene")) {
-        const scene = phaserGame.scene.getScene("GameScene");
-        if (scene && typeof scene.shutdown === "function") {
-          scene.shutdown();
-        }
-        phaserGame.scene.stop("GameScene");
-      }
-      net.close();
-      try {
-        await api.leaveLobby(lobby.id, app.auth.token);
-      } catch {
-      }
-    }
-  };
-
-  const onEnd = () => {
-    if (app.game) {
-      app.game.stop().then(() => {
-        app.game = null;
-      });
-    }
-    hideGameCanvas();
-    window.gameHUD?.hide();
-    window.gameHUD?.hideGameOver();
-    app.currentLobby = null;
-    app.showLobbyScreen();
-  };
-
   const scene = phaserGame.scene.getScene("GameScene");
   if (scene) {
-    scene.onEnd = onEnd;
+    scene.onEnd = () => exitToLobby();
   }
 }
 
 document.getElementById("btn-gameover-back").addEventListener("click", () => {
-  if (app.game) {
-    app.game.stop().then(() => {
-      app.game = null;
-    });
-  }
-  app.currentLobby = null;
-  hideGameCanvas();
-  window.gameHUD?.hide();
-  window.gameHUD?.hideGameOver();
-  app.showLobbyScreen();
+  exitToLobby();
 });
 
 document.getElementById("btn-exit-game")?.addEventListener("click", () => {
-  if (app.game) {
-    app.game.stop().then(() => {
-      app.game = null;
-    });
-  }
-  app.currentLobby = null;
-  hideGameCanvas();
-  window.gameHUD?.hide();
-  window.gameHUD?.hideGameOver();
-  app.showLobbyScreen();
+  exitToLobby();
 });
 
 window.addEventListener("resize", () => {

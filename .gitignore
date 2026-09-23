@@ -16,6 +16,9 @@ server/build/
 
 # Node
 node_modules/
+nakama-server/runtime/node_modules/
+nakama-server/modules/build/
+nakama-server/.cookie
 
 # Data
 data/

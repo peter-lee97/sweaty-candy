@@ -1,0 +1,15 @@
+{
+  "name": "sweaty-candy-nakama-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --outfile=../modules/build/index.js --format=cjs --platform=neutral --sourcemap=inline --log-level=warning",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "nakama-runtime": "github:heroiclabs/nakama-common",
+    "typescript": "^5.7.0"
+  }
+}

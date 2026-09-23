@@ -8,19 +8,24 @@ export function initWaiting(app) {
   const btnStart = document.getElementById("btn-start");
   const btnLeave = document.getElementById("btn-leave");
 
-  function render(lobby) {
-    if (!lobby) return;
-    nameEl.textContent = lobby.name;
-    idEl.textContent = `ID: ${lobby.id}`;
+  function render(info) {
+    const room = app.currentRoom;
+    if (!room) return;
+    room.name = info.name || room.name;
+    room.ownerId = info.ownerId || room.ownerId;
+    room.maxPlayers = info.maxPlayers || room.maxPlayers;
+    room.players = info.players || [];
+
+    nameEl.textContent = room.name;
+    idEl.textContent = `ID: ${room.matchId}`;
     playersEl.innerHTML = "";
-    const players = lobby.players && lobby.players.length ? lobby.players : [];
-    for (const p of players) {
+    for (const p of room.players) {
       const row = document.createElement("div");
       row.className = "waiting-player";
       const span = document.createElement("span");
-      span.textContent = p.username || p.id;
+      span.textContent = p.username || p.userId;
       row.appendChild(span);
-      if (p.id === lobby.ownerUserId) {
+      if (p.userId === room.ownerId) {
         const owner = document.createElement("span");
         owner.className = "owner";
         owner.textContent = "owner";
@@ -28,39 +33,40 @@ export function initWaiting(app) {
       }
       playersEl.appendChild(row);
     }
-    const isOwner = lobby.ownerUserId === app.auth.userId;
+    const isOwner = room.ownerId === app.auth.userId;
     btnStart.classList.toggle("hidden", !isOwner);
-    if (lobby.state === "Started") {
-      stateEl.textContent = "Starting game...";
-    } else if (lobby.state === "Waiting") {
-      stateEl.textContent = isOwner ? "Waiting for players - you can start" : "Waiting for host to start...";
-    }
+    stateEl.textContent = isOwner ? "Waiting for players - you can start" : "Waiting for host to start...";
   }
 
   app.waitingRender = render;
 
-  btnStart.addEventListener("click", async () => {
+  btnStart.addEventListener("click", () => {
     stateEl.textContent = "Starting...";
-    try {
-      await app.api.startLobby(app.currentLobby.id, app.auth.token);
-    } catch (err) {
-      stateEl.textContent = err.message || "Start failed";
-    }
+    app.socket.sendMatchState(app.currentRoom.matchId, app.api.OP.START, JSON.stringify({})).catch(() => {});
   });
 
   btnLeave.addEventListener("click", async () => {
-    try {
-      await app.api.leaveLobby(app.currentLobby.id, app.auth.token);
-    } catch {
-      /* ignore */
+    const room = app.currentRoom;
+    app.currentRoom = null;
+    if (room) {
+      try {
+        await app.socket.leaveMatch(room.matchId);
+      } catch {
+        /* ignore */
+      }
     }
-    app.currentLobby = null;
     app.showLobbyScreen();
   });
 }
 
 export function showWaiting(app) {
   setScreen(app, "waiting");
-  const lobby = app.currentLobby;
-  if (lobby) app.waitingRender(lobby);
+  const room = app.currentRoom;
+  if (!room) return;
+  app.waitingRender({
+    name: room.name,
+    ownerId: room.ownerId,
+    maxPlayers: room.maxPlayers,
+    players: room.players || []
+  });
 }

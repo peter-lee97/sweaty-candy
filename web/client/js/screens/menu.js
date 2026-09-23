@@ -12,7 +12,7 @@ export function initMenu(app) {
     statusEl.classList.remove("error");
     try {
       await app.ensureIdentity(nameEl.value.trim() || app.auth?.username || "");
-      app.showLobbyScreen();
+      await app.showLobbyScreen();
     } catch (err) {
       statusEl.textContent = err.message || "Sign in failed";
       statusEl.classList.add("error");

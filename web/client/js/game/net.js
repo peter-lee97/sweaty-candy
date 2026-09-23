@@ -1,4 +1,5 @@
 import { CONFIG } from "/shared/game.js";
+import { OP, decodeData } from "/js/nakama.js";
 
 const R = CONFIG;
 const HISTORY_MAX = 60;
@@ -6,13 +7,12 @@ const SNAPSHOT_BUFFER = 12;
 const RTT_HISTORY = 5;
 
 export class Net {
-  constructor(url, token, lobbyId) {
-    this.url = url;
-    this.token = token;
-    this.lobbyId = lobbyId;
-    this.ws = null;
-    this.connected = false;
-    this.myId = null;
+  constructor({ socket, matchId, session }) {
+    this.socket = socket;
+    this.matchId = matchId;
+    this.session = session;
+    this.myId = session.user_id;
+    this.connected = true;
     this.roster = new Map();
     this.stateMeta = { serverTick: 0, wave: 0, phase: "countdown", phaseTimer: 0, gameOver: false };
     this.players = new Map();
@@ -26,87 +26,48 @@ export class Net {
     this.seq = 0;
     this.on = { close: null };
     this.predictionHistory = [];
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
-    this.reconnectDelay = 2000;
-  }
-
-  connect() {
-    return new Promise((resolve, reject) => {
-      const ws = new WebSocket(this.url);
-      this.ws = ws;
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: "hello", token: this.token, lobbyId: this.lobbyId }));
-      };
-      ws.onmessage = (ev) => {
-        let msg;
-        try {
-          msg = JSON.parse(ev.data);
-        } catch {
-          return;
-        }
-        if (msg.type === "welcome") {
-          this.myId = msg.playerId;
-          this.roster = new Map(Object.entries(msg.players || {}));
-          this.connected = true;
-          this.reconnectAttempts = 0;
-          resolve(this);
-        } else if (msg.type === "snapshot") {
-          this.applySnapshot(msg);
-        } else if (msg.type === "pong") {
-          this.pushRtt(performance.now() - msg.t);
-        } else if (msg.type === "kick") {
-          this.connected = false;
-          reject(new Error(msg.reason || "kicked from server"));
-        }
-      };
-      ws.onerror = (err) => {
-        console.error("WebSocket error:", err);
-        if (!this.connected) reject(new Error("websocket error"));
-      };
-      ws.onclose = () => {
-        this.connected = false;
-        this.on.close?.();
-        this.tryReconnect();
-      };
+    this.onEnd = null;
+    this._readyResolve = null;
+    this.ready = new Promise((resolve) => {
+      this._readyResolve = resolve;
     });
   }
 
-  tryReconnect() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.log("Max reconnect attempts reached");
-      return;
+  handleMatchData(md) {
+    const data = decodeData(md.data);
+    if (md.op_code === OP.SNAPSHOT) {
+      try {
+        this.applySnapshot(JSON.parse(data));
+      } catch {
+        /* ignore malformed */
+      }
+      if (this._readyResolve) {
+        this._readyResolve();
+        this._readyResolve = null;
+      }
+    } else if (md.op_code === OP.PONG) {
+      try {
+        this.pushRtt(performance.now() - JSON.parse(data).t);
+      } catch {
+        /* ignore */
+      }
+    } else if (md.op_code === OP.GAMEOVER) {
+      this.stateMeta.gameOver = true;
     }
-    this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 4);
-    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-    setTimeout(() => {
-      this.connect().catch(() => {});
-    }, delay);
+  }
+
+  sendIntent(intent) {
+    this.socket.sendMatchState(this.matchId, OP.INTENT, JSON.stringify(intent)).catch(() => {});
+  }
+
+  sendPing(t) {
+    this.socket.sendMatchState(this.matchId, OP.PING, JSON.stringify({ t })).catch(() => {});
   }
 
   pushRtt(v) {
     this.rttSamples.push(v);
     if (this.rttSamples.length > RTT_HISTORY) this.rttSamples.shift();
     this.rtt = this.rttSamples.reduce((a, b) => a + b, 0) / this.rttSamples.length;
-  }
-
-  sendIntent(intent) {
-    if (!this.connected) return;
-    this.ws.send(JSON.stringify({ type: "intent", ...intent }));
-  }
-
-  sendPing(t) {
-    if (this.connected) this.ws.send(JSON.stringify({ type: "ping", t }));
-  }
-
-  close() {
-    this.maxReconnectAttempts = 0;
-    this.connected = false;
-    try {
-      this.ws.close();
-    } catch {
-    }
   }
 
   applySnapshot(snap) {
@@ -183,6 +144,10 @@ export class Net {
       return { snap: true, error: { x: 0, y: 0 }, health: serverHealth };
     }
     return { snap: false, error: { x: ex, y: ey }, dist, health: serverHealth };
+  }
+
+  close() {
+    this.connected = false;
   }
 
   reset() {

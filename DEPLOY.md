@@ -3,47 +3,48 @@
 ## Architecture
 
 ```
-┌── VPS (bare metal) ─────────────────────────────────────────────────┐
-│                                                                     │
-│  Caddy (port 80/443, systemd)                                       │
-│    shoot.compilechicken.com                                          │
-│      /            → localhost:8787 (backend: client + /shared + API)│
-│    game.compilechicken.com                                           │
-│      /            → localhost:7777 (game server WebSocket via TLS)  │
-│                                                                     │
-│  sweaty-candy-backend (Node.js, systemd)                            │
-│    port 8787 — serves web/client + shared/, auth, lobbies, registry │
-│                                                                     │
-│  sweaty-candy-server (Node.js game server, systemd)                 │
-│    port 7777 — game server WebSocket (proxied through Caddy)        │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+┌── VPS (bare metal) ───────────────────────────────────────────────────┐
+│                                                                       │
+│  Caddy (port 80/443, systemd)                                         │
+│    shoot.compilechicken.com                                            │
+│      handle /v2/*  → reverse_proxy 127.0.0.1:7350   (Nakama API+WS)  │
+│      handle *      → reverse_proxy 127.0.0.1:8787   (static client)   │
+│                                                                       │
+│  Docker Compose (systemd / docker compose):                           │
+│    postgres  (127.0.0.1, no public port)  — Nakama database           │
+│    nakama    (127.0.0.1:7350)             — auth, lobbies, game sim   │
+│    static    (127.0.0.1:8787)             — web/client + /shared      │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
-The backend is a single origin that serves the static client (`web/client/`), the shared
-module (`shared/game.js`), and the REST/WS API. No separate static file host or build step.
+Nakama replaces the old Node.js backend and game server. It handles guest auth, rooms
+(lobbies), and the authoritative 60Hz game simulation as match handlers. The static
+client is served by a tiny Node server (`web/server.js`). `game.compilechicken.com`
+is retired - gameplay runs on the same Nakama socket.
 
 ## Prerequisites
 
 - VPS with Debian 12+
-- Node.js 22+ (via nvm)
+- Docker + Docker Compose plugin
 - Domain name (e.g. `shoot.compilechicken.com`)
-- DNS A records for `shoot` and `game` pointing to VPS IP
+- DNS A record for `shoot` pointing to the VPS IP
 
 ## DNS
 
 | Record | Type | Value |
 |--------|------|-------|
 | `shoot` | A | VPS IP |
-| `game` | A | VPS IP |
 
 ## Firewall (Hetzner Cloud Console)
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
 | 80 | TCP | HTTP (Let's Encrypt cert challenge) |
-| 443 | TCP | HTTPS (game client, backend API, game server WebSocket via Caddy) |
-| 7777 | TCP | Optional — game server WebSocket (direct, for testing without Caddy proxy) |
+| 443 | TCP | HTTPS (client, Nakama API, WebSocket via Caddy) |
+
+Nakama (7350) and the static server (8787) bind to 127.0.0.1 and are never exposed
+directly. The Nakama console (7351) is internal only.
 
 ## Caddy Setup
 
@@ -67,199 +68,92 @@ import /etc/caddy/sites-enabled/*
 
 ```
 shoot.compilechicken.com {
-    reverse_proxy localhost:8787
-}
-
-game.compilechicken.com {
-    reverse_proxy localhost:7777
-}
-```
-
-`shoot.compilechicken.com` proxies the whole backend, which serves the client, the shared
-module, and the `/v1/*` API on one origin. `game.compilechicken.com` provides TLS-terminated
-WebSocket access to the Node.js game server. Caddy auto-provisions Let's Encrypt certs and
-transparently upgrades/proxies WebSocket connections.
-
-### Media converter site config (`/etc/caddy/sites-enabled/mc.caddy`)
-
-```
-mc.compilechicken.com, www.mc.compilechicken.com {
-    handle /pricing/webhook* {
-        reverse_proxy localhost:8000
+    handle /v2/* {
+        reverse_proxy 127.0.0.1:7350
     }
     handle {
-        reverse_proxy localhost:3000
+        reverse_proxy 127.0.0.1:8787
     }
 }
 ```
 
-## Node.js
+Nakama serves both its REST API and the realtime WebSocket under `/v2/*` on port 7350.
+Caddy terminates TLS and proxies WebSocket upgrades transparently. The static server
+(8787) serves the client and `/shared/*`.
 
-### Install via nvm
+## Docker Compose
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-nvm install 22
-```
+The production stack lives in `docker-compose.prod.yml` at the repo root. The GitHub
+Actions workflow (`.github/workflows/deploy.yml`) builds `Dockerfile.nakama` (Nakama +
+bundled runtime) and `Dockerfile.static` (client static server), uploads them, and runs
+`docker compose -f docker-compose.prod.yml up -d --force-recreate`.
 
-### App files
+The Nakama runtime source (`nakama-server/runtime/`) is bundled into the image by
+`Dockerfile.nakama` with esbuild. The dev compose file (`nakama-server/docker-compose-postgres.yml`)
+mounts the repo so the bundle is loaded from `nakama-server/modules/build/`.
 
-Place the repo at `/opt/sweaty-candy/` and install dependencies:
+## Environment Variables (docker-compose.prod.yml)
 
-```bash
-cd /opt/sweaty-candy/backend
-npm install
-cd /opt/sweaty-candy/gameserver
-npm install
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POSTGRES_PASSWORD` | `localdb` | Postgres password (set a strong one in prod) |
+| `NAKAMA_SERVER_KEY` | `defaultkey` | Nakama socket server key |
+| `NAKAMA_ENCRYPTION_KEY` | `defaultencryptionkey` | Nakama session encryption key |
+| `NAKAMA_HTTP_KEY` | `defaulthttpkey` | Nakama runtime HTTP key |
+| `CONSOLE_USERNAME` / `CONSOLE_PASSWORD` | `admin` / `password` | Nakama console credentials |
 
-The backend serves `web/client/` and `shared/` relative to its own module path, so the repo
-layout must be preserved (do not copy only the `backend/` folder).
+Session lifetime is `--session.token_expiry_sec 7200` (2h, matches the old guest
+session) with `--session.refresh_token_expiry_sec 604800` (7d refresh).
 
-## Local Development & Testing
+## Client URL Detection
 
-### Prerequisites
+The client (`web/client/js/nakama.js`) computes the Nakama base URL at runtime:
 
-- Node.js 22+ installed locally
-- No build step, no Godot, no Caddy required for local dev
+- Dev (`http://127.0.0.1:8787` or `localhost:8787`): uses `http://<hostname>:7350`.
+- Prod (`https://shoot.compilechicken.com`): uses `window.location.origin` (Caddy
+  proxies `/v2/*` to Nakama).
 
-### Start all services locally
+## Local Development
 
 ```bash
 ./dev.sh
 ```
 
-Starts the backend (8787) + game server (7777). Open `http://127.0.0.1:8787`.
+`dev.sh` builds the runtime bundle, starts Nakama + Postgres via docker compose,
+waits for Nakama to be healthy, and starts the static server on 8787. Open
+`http://127.0.0.1:8787`. Nakama console: `http://127.0.0.1:7351` (`admin`/`password`).
 
-### Test multiplayer locally
+For local multiplayer testing use two different origins so localStorage identities
+stay isolated, e.g. one tab at `http://127.0.0.1:8787` and one at
+`http://localhost:8787`.
 
-1. Open `http://127.0.0.1:8787` in one tab and `http://localhost:8787` in another
-   (different origins = isolated localStorage identities).
-2. Tab 1: Create a lobby → Start Game.
-3. Tab 2: Join the lobby → both players should see each other in-game.
+Stop with Ctrl+C (leaves Nakama containers running; `docker compose -f
+nakama-server/docker-compose-postgres.yml down` stops them).
 
-### Stop all services
-
-```bash
-pkill -f "node src/app.js"
-pkill -f "node src/server.js"
-```
-
-## Production Deploy
-
-### Prerequisites
-
-- Node.js 22+ installed on the server
-- SSH access to production server
-- Repo rsync'd to `/opt/sweaty-candy/` (layout preserved)
-
-### Upload client + server
+## Production Deploy (manual)
 
 ```bash
-rsync -avz -e "ssh -i ~/.ssh/id_ed25519" --exclude node_modules --exclude data ./ dev@mc.prod:/opt/sweaty-candy/
+# Build + upload + deploy via the CI workflow (master push)
+git push origin master
+
+# Or manually on the server:
+cd /home/dev/sweaty-candy
+docker compose -f docker-compose.prod.yml up -d --force-recreate
 ```
-
-### Restart game server on production
-
-```bash
-ssh -i ~/.ssh/id_ed25519 dev@mc.prod "sudo systemctl restart sweaty-candy-server"
-```
-
-### Verify production
-
-```bash
-ssh -i ~/.ssh/id_ed25519 dev@mc.prod "curl -s http://localhost:8787/health && curl -s http://localhost:8787/v1/servers | head -1"
-nc -z -w 3 <VPS_IP> 7777 && echo "Game server: OPEN" || echo "Game server: CLOSED"
-curl -s https://shoot.compilechicken.com/ | head -1
-```
-
-## Systemd Units
-
-### Backend (`/etc/systemd/system/sweaty-candy-backend.service`)
-
-```ini
-[Unit]
-Description=Sweaty Candy Backend
-After=network.target
-
-[Service]
-Type=simple
-User=dev
-WorkingDirectory=/opt/sweaty-candy/backend
-Environment=PORT=8787
-Environment=HOST=127.0.0.1
-Environment=GUEST_SESSION_DURATION_MS=7200000
-Environment=HOME=/home/dev
-ExecStart=/home/dev/.nvm/versions/node/v22.23.0/bin/node src/app.js
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### Game Server (`/etc/systemd/system/sweaty-candy-server.service`)
-
-```ini
-[Unit]
-Description=Sweaty Candy Game Server
-After=network.target sweaty-candy-backend.service
-
-[Service]
-Type=simple
-User=dev
-WorkingDirectory=/opt/sweaty-candy/gameserver
-Environment=BACKEND_BASE_URL=http://localhost:8787
-Environment=ADVERTISED_HOST=game.compilechicken.com
-Environment=ADVERTISED_PORT=443
-Environment=LISTEN_PORT=7777
-Environment=MAX_PLAYERS=4
-Environment=HOME=/home/dev
-ExecStart=/home/dev/.nvm/versions/node/v22.23.0/bin/node src/server.js
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### Enable services
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable sweaty-candy-backend sweaty-candy-server --now
-```
-
-## Game Server Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BACKEND_BASE_URL` | `http://127.0.0.1:8787` | Backend API URL for registration |
-| `ADVERTISED_HOST` | `127.0.0.1` | Host sent to backend for clients to connect to (use `game.compilechicken.com` for production) |
-| `ADVERTISED_PORT` | `LISTEN_PORT` | Port sent to backend (use `443` for Caddy proxy with TLS) |
-| `LISTEN_PORT` | `7777` | WebSocket server listen port (local, behind Caddy proxy) |
-| `LISTEN_HOST` | `0.0.0.0` | WebSocket bind host |
-| `MAX_PLAYERS` | `4` | Max connected players |
-
-## Client URL Detection
-
-When running in a browser, the client uses `window.location.origin` for the backend API and
-lobby events WS. The game server WebSocket URL comes from the lobby's assigned server
-(`serverHost`/`serverPort`) and uses `wss://` when the port is 443, otherwise `ws://`.
 
 ## Verification Checklist
 
-- [ ] DNS A records for `shoot` and `game` point to VPS IP
-- [ ] Ports 80, 443 open in firewall (port 7777 optional)
+- [ ] DNS A record for `shoot` points to VPS IP
+- [ ] Ports 80, 443 open in firewall
 - [ ] Caddy running: `systemctl status caddy`
-- [ ] Backend healthy: `curl http://localhost:8787/health`
-- [ ] Game server registered: `curl http://localhost:8787/v1/servers` shows host `game.compilechicken.com` and port `443`
-- [ ] Client served: `curl -I https://shoot.compilechicken.com` returns HTML and `curl -I https://shoot.compilechicken.com/shared/game.js` returns JS
-- [ ] Game WebSocket via TLS: WebSocket handshake to `wss://game.compilechicken.com` returns `101 Switching Protocols`
-- [ ] Multiplayer test: two browser tabs at `https://shoot.compilechicken.com` can see each other in-game
+- [ ] Nakama healthy: `docker compose -f /home/dev/sweaty-candy/docker-compose.prod.yml ps` shows all `Up (healthy)`
+- [ ] Static served: `curl -I https://shoot.compilechicken.com` returns HTML
+- [ ] Nakama API proxied: `curl -s -o /dev/null -w "%{http_code}" https://shoot.compilechicken.com/v2/health` (expect a 4xx/JSON from Nakama, not a Caddy 502)
+- [ ] Client served: `curl -I https://shoot.compilechicken.com/shared/game.js` returns JS
+- [ ] Multiplayer test: two browser tabs at `https://shoot.compilechicken.com` can create/join a room and play together
 
 ## Known Issues
 
-- **Caddy Debian package**: The Debian-packaged Caddy `2.6.2-5` silently ignores `reverse_proxy` subdirectives like `flush_interval` and `max_fails`. If these are needed, install from the official Caddy repo (instructions above).
+- **Caddy Debian package**: The Debian-packaged Caddy `2.6.2-5` silently ignores
+  `reverse_proxy` subdirectives like `flush_interval` and `max_fails`. If these are
+  needed, install from the official Caddy repo (instructions above).
